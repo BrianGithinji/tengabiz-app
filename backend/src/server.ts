@@ -5,6 +5,8 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import mpesaRoutes from './routes/mpesa.js'
 import paymentsRoutes from './routes/payments.js'
+import authRoutes from './routes/auth.js'
+import channelsRoutes from './routes/channels.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -21,6 +23,8 @@ app.use(express.static(distPath))
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/mpesa', mpesaRoutes)
 app.use('/api/payments', paymentsRoutes)
+app.use('/api/auth', authRoutes)
+app.use('/api/channels', channelsRoutes)
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'TENGABIZ API', env: process.env.MPESA_ENV ?? 'sandbox' })

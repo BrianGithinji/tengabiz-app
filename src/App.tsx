@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { mpesa, type Transaction as ApiTx, type Summary } from './lib/mpesa'
+import { mpesa, auth, channels, type Transaction as ApiTx, type Summary, type Channel } from './lib/mpesa'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Tab = 'dashboard' | 'transactions' | 'savings' | 'reports' | 'settings'
+type AuthScreen = 'login' | 'register'
 
 interface SavingsGoal {
   id: string
@@ -11,6 +12,12 @@ interface SavingsGoal {
   target: number
   saved: number
   deadline: string
+}
+
+interface SessionUser {
+  businessName: string
+  ownerName: string
+  token: string
 }
 
 // ─── Live data hook ───────────────────────────────────────────────────────────
@@ -53,6 +60,105 @@ const CHANNEL_LABELS: Record<string, string> = {
 }
 
 // ─── Components ──────────────────────────────────────────────────────────────
+
+// ─── Auth screens ───────────────────────────────────────────────────────────────
+
+function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser) => void }) {
+  const [screen, setScreen] = useState<AuthScreen>('login')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
+  const [regForm, setRegForm] = useState({
+    email: '', password: '', businessName: '', ownerName: '', phone: '', location: ''
+  })
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault(); setError(''); setLoading(true)
+    try {
+      const res = await auth.login(loginForm.email, loginForm.password)
+      localStorage.setItem('tengabiz_token', res.token)
+      onSuccess({ businessName: res.businessName, ownerName: res.ownerName, token: res.token })
+    } catch (err: any) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault(); setError(''); setLoading(true)
+    try {
+      const res = await auth.register(regForm)
+      localStorage.setItem('tengabiz_token', res.token)
+      onSuccess({ businessName: res.businessName, ownerName: res.ownerName, token: res.token })
+    } catch (err: any) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <div className="min-h-screen bg-[#fdf8f0] flex items-center justify-center p-4">
+      <div className="w-full max-w-sm">
+        <div className="flex items-center gap-2 justify-center mb-8">
+          <div className="w-10 h-10 rounded-xl bg-[#e8a020] flex items-center justify-center font-black text-[#0f3d22] text-lg">T</div>
+          <span className="font-black text-2xl tracking-tight text-[#0f3d22]">TENGABIZ</span>
+        </div>
+        <div className="bg-white rounded-2xl p-6 border border-[#e2e8f0] shadow-sm">
+          <div className="flex gap-1 mb-6 bg-[#f7f7f7] rounded-xl p-1">
+            {(['login', 'register'] as AuthScreen[]).map(s => (
+              <button key={s} onClick={() => { setScreen(s); setError('') }}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  screen === s ? 'bg-white text-[#1c1c1e] shadow-sm' : 'text-[#718096]'
+                }`}>{s === 'login' ? 'Sign In' : 'Register'}</button>
+            ))}
+          </div>
+          {screen === 'login' ? (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-[#4a5568] block mb-1">Email</label>
+                <input type="email" required value={loginForm.email}
+                  onChange={e => setLoginForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-[#4a5568] block mb-1">Password</label>
+                <input type="password" required value={loginForm.password}
+                  onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
+                  className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+              </div>
+              {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+              <button type="submit" disabled={loading}
+                className="w-full py-3 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22] disabled:opacity-60">
+                {loading ? 'Signing in...' : 'Sign In'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-3">
+              {([
+                { label: 'Business Name', key: 'businessName', type: 'text', required: true },
+                { label: 'Your Name', key: 'ownerName', type: 'text', required: true },
+                { label: 'Email', key: 'email', type: 'email', required: true },
+                { label: 'Password (min 6 chars)', key: 'password', type: 'password', required: true },
+                { label: 'Phone (optional)', key: 'phone', type: 'tel', required: false },
+                { label: 'Location (optional)', key: 'location', type: 'text', required: false },
+              ] as const).map(f => (
+                <div key={f.key}>
+                  <label className="text-xs font-semibold text-[#4a5568] block mb-1">{f.label}</label>
+                  <input type={f.type} required={f.required}
+                    value={regForm[f.key as keyof typeof regForm]}
+                    onChange={e => setRegForm(r => ({ ...r, [f.key]: e.target.value }))}
+                    className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+                </div>
+              ))}
+              {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+              <button type="submit" disabled={loading}
+                className="w-full py-3 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22] disabled:opacity-60">
+                {loading ? 'Creating account...' : 'Create Account'}
+              </button>
+            </form>
+          )}
+        </div>
+        <p className="text-center text-xs text-[#718096] mt-4">Smart Business Finance for Kenyan MSMEs</p>
+      </div>
+    </div>
+  )
+}
 
 function Badge({ channel }: { channel: string }) {
   return (
@@ -421,56 +527,113 @@ function Reports() {
   )
 }
 
-function Settings() {
+function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  const [userChannels, setUserChannels] = useState<Channel[]>([])
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState({ type: 'till' as 'till' | 'paybill' | 'pochi', identifier: '', label: '' })
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    channels.list().then(setUserChannels).catch(console.error)
+  }, [])
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault(); setError('')
+    try {
+      const ch = await channels.add(form)
+      setUserChannels(c => [...c, ch])
+      setForm({ type: 'till', identifier: '', label: '' })
+      setAdding(false)
+    } catch (err: any) { setError(err.message) }
+  }
+
+  async function handleRemove(id: string) {
+    await channels.remove(id)
+    setUserChannels(c => c.filter(ch => ch.id !== id))
+  }
+
+  const CHANNEL_TYPE_LABELS = { till: 'M-PESA Till', paybill: 'PayBill', pochi: 'Pochi la Biashara' }
+  const CHANNEL_TYPE_COLORS = { till: 'bg-green-500', paybill: 'bg-blue-500', pochi: 'bg-amber-500' }
+
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="font-display text-xl font-bold text-[#1c1c1e]">Business Profile</h2>
-        <p className="text-sm text-[#718096]">Your business details and payment channels</p>
-      </div>
-
-      {/* Business info */}
-      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0] space-y-4">
-        <h3 className="font-display font-bold text-[#1c1c1e]">Mama Aisha Groceries</h3>
-        <div className="space-y-3">
-          {[
-            { label: 'Business Owner', val: 'Aisha Otieno' },
-            { label: 'Business Type', val: 'Mama Mboga / Kiosk' },
-            { label: 'Location', val: 'Gikomba Market, Nairobi' },
-            { label: 'Phone', val: '0712 345 678' },
-          ].map(f => (
-            <div key={f.label} className="flex justify-between py-2 border-b border-[#f0f0f0] last:border-0">
-              <span className="text-sm text-[#718096]">{f.label}</span>
-              <span className="text-sm font-medium text-[#1c1c1e]">{f.val}</span>
-            </div>
-          ))}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-display text-xl font-bold text-[#1c1c1e]">Business Profile</h2>
+          <p className="text-sm text-[#718096]">Your business details and payment channels</p>
         </div>
+        <button onClick={onLogout} className="text-xs text-red-500 font-semibold hover:text-red-700">Sign out</button>
       </div>
 
-      {/* Payment channels */}
+      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0] space-y-3">
+        <h3 className="font-display font-bold text-[#1c1c1e]">{user.businessName}</h3>
+        {[
+          { label: 'Business Owner', val: user.ownerName },
+        ].map(f => (
+          <div key={f.label} className="flex justify-between py-2 border-b border-[#f0f0f0] last:border-0">
+            <span className="text-sm text-[#718096]">{f.label}</span>
+            <span className="text-sm font-medium text-[#1c1c1e]">{f.val}</span>
+          </div>
+        ))}
+      </div>
+
       <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
-        <h3 className="font-display font-bold text-[#1c1c1e] mb-3">Connected Channels</h3>
-        <div className="space-y-3">
-          {[
-            { name: 'M-PESA Till Number', id: '174823', active: true, color: 'bg-green-500' },
-            { name: 'Pochi la Biashara', id: '0712 345 678', active: true, color: 'bg-amber-500' },
-            { name: 'PayBill', id: 'Not connected', active: false, color: 'bg-gray-300' },
-          ].map(ch => (
-            <div key={ch.name} className="flex items-center gap-3 py-2 border-b border-[#f0f0f0] last:border-0">
-              <div className={`w-2.5 h-2.5 rounded-full ${ch.color}`} />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-[#1c1c1e]">{ch.name}</p>
-                <p className="text-xs text-[#718096] font-mono-data">{ch.id}</p>
-              </div>
-              <button className={`text-xs px-3 py-1 rounded-full font-semibold ${ch.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-[#718096] hover:bg-green-50 hover:text-green-700'}`}>
-                {ch.active ? 'Connected' : 'Connect'}
-              </button>
-            </div>
-          ))}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-display font-bold text-[#1c1c1e]">Payment Channels</h3>
+          <button onClick={() => setAdding(a => !a)}
+            className="text-xs font-semibold text-[#1a6b3c] hover:underline">
+            {adding ? 'Cancel' : '+ Add channel'}
+          </button>
         </div>
+
+        {adding && (
+          <form onSubmit={handleAdd} className="mb-4 space-y-3 bg-[#f7f7f7] rounded-xl p-4">
+            <div>
+              <label className="text-xs font-semibold text-[#4a5568] block mb-1">Channel Type</label>
+              <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as any }))}
+                className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c] bg-white">
+                <option value="till">M-PESA Till Number</option>
+                <option value="paybill">PayBill Shortcode</option>
+                <option value="pochi">Pochi la Biashara (Phone)</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#4a5568] block mb-1">
+                {form.type === 'pochi' ? 'Phone Number' : 'Shortcode / Number'}
+              </label>
+              <input required value={form.identifier}
+                placeholder={form.type === 'pochi' ? '0712345678' : form.type === 'till' ? '174379' : '600984'}
+                onChange={e => setForm(f => ({ ...f, identifier: e.target.value }))}
+                className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#4a5568] block mb-1">Label (optional)</label>
+              <input value={form.label} placeholder="e.g. Main Shop Till"
+                onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+                className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+            </div>
+            {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+            <button type="submit" className="w-full py-2.5 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22]">
+              Save Channel
+            </button>
+          </form>
+        )}
+
+        {userChannels.length === 0 && !adding ? (
+          <p className="text-sm text-[#718096] text-center py-4">No channels added yet. Add your Till, PayBill, or Pochi number to start tracking payments.</p>
+        ) : userChannels.map(ch => (
+          <div key={ch.id} className="flex items-center gap-3 py-2 border-b border-[#f0f0f0] last:border-0">
+            <div className={`w-2.5 h-2.5 rounded-full ${CHANNEL_TYPE_COLORS[ch.type]}`} />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-[#1c1c1e]">{ch.label ?? CHANNEL_TYPE_LABELS[ch.type]}</p>
+              <p className="text-xs text-[#718096] font-mono-data">{ch.identifier}</p>
+            </div>
+            <button onClick={() => handleRemove(ch.id)}
+              className="text-xs text-red-400 hover:text-red-600 font-semibold">Remove</button>
+          </div>
+        ))}
       </div>
 
-      {/* Allocation model */}
       <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
         <h3 className="font-display font-bold text-[#1c1c1e] mb-1">Allocation Model</h3>
         <p className="text-xs text-[#718096] mb-4">How TENGABIZ splits incoming money</p>
@@ -485,7 +648,6 @@ function Settings() {
             <span className="font-mono-data font-bold text-sm" style={{ color: a.color }}>{a.pct}%</span>
           </div>
         ))}
-        <button className="mt-3 text-xs text-[#718096] hover:text-[#1a6b3c] font-semibold">Customize splits →</button>
       </div>
     </div>
   )
@@ -505,7 +667,28 @@ const NAV: { id: Tab; label: string; icon: string }[] = [
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('dashboard')
+  const [user, setUser] = useState<SessionUser | null>(() => {
+    const token = localStorage.getItem('tengabiz_token')
+    const name = localStorage.getItem('tengabiz_business')
+    const owner = localStorage.getItem('tengabiz_owner')
+    return token && name && owner ? { token, businessName: name, ownerName: owner } : null
+  })
   const { transactions, summary, loading } = useLiveData()
+
+  function handleAuthSuccess(u: SessionUser) {
+    localStorage.setItem('tengabiz_business', u.businessName)
+    localStorage.setItem('tengabiz_owner', u.ownerName)
+    setUser(u)
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('tengabiz_token')
+    localStorage.removeItem('tengabiz_business')
+    localStorage.removeItem('tengabiz_owner')
+    setUser(null)
+  }
+
+  if (!user) return <AuthPage onSuccess={handleAuthSuccess} />
 
   return (
     <div className="min-h-screen bg-[#fdf8f0] flex">
@@ -541,10 +724,10 @@ export default function App() {
         {/* Bottom profile */}
         <div className="mt-4 px-2 pt-4 border-t border-white/10">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#e8a020] flex items-center justify-center text-[#0f3d22] font-bold text-sm">A</div>
+            <div className="w-8 h-8 rounded-full bg-[#e8a020] flex items-center justify-center text-[#0f3d22] font-bold text-sm">{user.ownerName[0]}</div>
             <div>
-              <p className="text-xs font-semibold text-white">Mama Aisha</p>
-              <p className="text-[10px] text-green-400">Gikomba Market</p>
+              <p className="text-xs font-semibold text-white">{user.ownerName}</p>
+              <p className="text-[10px] text-green-400">{user.businessName}</p>
             </div>
           </div>
         </div>
@@ -583,7 +766,7 @@ export default function App() {
               {tab === 'transactions' && <Transactions transactions={transactions} />}
               {tab === 'savings' && <Savings />}
               {tab === 'reports' && <Reports />}
-              {tab === 'settings' && <Settings />}
+              {tab === 'settings' && <Settings user={user} onLogout={handleLogout} />}
             </>
           )}
         </div>

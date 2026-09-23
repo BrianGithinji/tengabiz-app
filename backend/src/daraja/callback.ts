@@ -17,21 +17,30 @@ function normalisePhone(raw: string): string {
   return digits
 }
 
+// Look up which user owns a given channel identifier (Till, Paybill shortcode, or phone)
+async function resolveUser(identifier: string): Promise<string | null> {
+  const { rows } = await pool.query(
+    `SELECT user_id FROM channels WHERE identifier = $1 AND active = TRUE LIMIT 1`,
+    [identifier]
+  )
+  return rows[0]?.user_id ?? null
+}
+
 async function insertTx(tx: {
-  id: string; mpesa_receipt: string | null; phone: string; amount: number
-  channel: string; type: string; account_ref: string | null
-  transaction_date: string; business_lock: number; savings_growth: number
-  flexible_funds: number; allocated: number
+  id: string; user_id: string | null; mpesa_receipt: string | null
+  phone: string; amount: number; channel: string; type: string
+  account_ref: string | null; transaction_date: string
+  business_lock: number; savings_growth: number; flexible_funds: number; allocated: number
 }) {
   await pool.query(
     `INSERT INTO transactions
-      (id, mpesa_receipt, phone, amount, channel, type, account_ref,
+      (id, user_id, mpesa_receipt, phone, amount, channel, type, account_ref,
        transaction_date, business_lock, savings_growth, flexible_funds, allocated)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      ON CONFLICT (mpesa_receipt) DO NOTHING`,
-    [tx.id, tx.mpesa_receipt, tx.phone, tx.amount, tx.channel, tx.type,
-     tx.account_ref, tx.transaction_date, tx.business_lock, tx.savings_growth,
-     tx.flexible_funds, tx.allocated]
+    [tx.id, tx.user_id, tx.mpesa_receipt, tx.phone, tx.amount, tx.channel,
+     tx.type, tx.account_ref, tx.transaction_date, tx.business_lock,
+     tx.savings_growth, tx.flexible_funds, tx.allocated]
   )
 }
 
@@ -52,8 +61,12 @@ export async function handleStkCallback(req: Request, res: Response) {
   const amount = Number(items['Amount'])
   const { businessLock, savingsGrowth, flexibleFunds } = allocate(amount)
 
+  // Match to user via the shortcode that received the payment
+  const shortcode = String(process.env.MPESA_STK_SHORTCODE ?? '')
+  const userId = await resolveUser(shortcode)
+
   await insertTx({
-    id: randomUUID(),
+    id: randomUUID(), user_id: userId,
     mpesa_receipt: items['MpesaReceiptNumber'] as string,
     phone: normalisePhone(String(items['PhoneNumber'])),
     amount, channel: 'stk_push', type: 'in', account_ref: null,
@@ -62,7 +75,7 @@ export async function handleStkCallback(req: Request, res: Response) {
     flexible_funds: flexibleFunds, allocated: 1,
   })
 
-  console.log(`[STK] Saved — KES ${amount} from ${items['PhoneNumber']}`)
+  console.log(`[STK] Saved — KES ${amount} for user ${userId ?? 'unmatched'}`)
   res.json({ ResultCode: 0, ResultDesc: 'Accepted' })
 }
 
@@ -79,16 +92,20 @@ export async function handleC2BConfirmation(req: Request, res: Response) {
   const amount = Number(TransAmount)
   const { businessLock, savingsGrowth, flexibleFunds } = allocate(amount)
 
+  // Match to user via their Till/Paybill shortcode or Pochi phone number
+  const identifier = BusinessShortCode ?? normalisePhone(String(MSISDN))
+  const userId = await resolveUser(identifier)
+
   await insertTx({
-    id: randomUUID(), mpesa_receipt: TransID,
+    id: randomUUID(), user_id: userId, mpesa_receipt: TransID,
     phone: normalisePhone(String(MSISDN)), amount,
-    channel: BusinessShortCode ? 'paybill' : 'c2b', type: 'in',
+    channel: BusinessShortCode ? 'paybill' : 'pochi', type: 'in',
     account_ref: BillRefNumber ?? null, transaction_date: String(TransTime),
     business_lock: businessLock, savings_growth: savingsGrowth,
     flexible_funds: flexibleFunds, allocated: 1,
   })
 
-  console.log(`[C2B] Saved — KES ${amount} from ${MSISDN} (${TransID})`)
+  console.log(`[C2B] Saved — KES ${amount} for user ${userId ?? 'unmatched'}`)
   res.json({ ResultCode: 0, ResultDesc: 'Accepted' })
 }
 

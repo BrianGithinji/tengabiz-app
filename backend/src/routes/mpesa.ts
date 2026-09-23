@@ -6,6 +6,7 @@ import {
   handleTransactionTimeout,
 } from '../daraja/callback.js'
 import { validate, stkPushSchema, stkQuerySchema, transactionStatusSchema } from '../middleware/validate.js'
+import { requireAuth, type AuthRequest } from '../middleware/auth.js'
 import pool from '../db.js'
 
 const router = Router()
@@ -63,14 +64,17 @@ router.post('/transaction-status', validate(transactionStatusSchema), async (req
   }
 })
 
-// GET /api/mpesa/transactions — all transactions, newest first
-router.get('/transactions', async (_req, res) => {
-  const { rows } = await pool.query('SELECT * FROM transactions ORDER BY created_at DESC')
+// GET /api/mpesa/transactions — scoped to logged-in user
+router.get('/transactions', requireAuth, async (req: AuthRequest, res) => {
+  const { rows } = await pool.query(
+    'SELECT * FROM transactions WHERE user_id = $1 ORDER BY created_at DESC',
+    [req.userId]
+  )
   res.json(rows)
 })
 
-// GET /api/mpesa/summary — totals for dashboard
-router.get('/summary', async (_req, res) => {
+// GET /api/mpesa/summary — scoped to logged-in user
+router.get('/summary', requireAuth, async (req: AuthRequest, res) => {
   const { rows } = await pool.query(`
     SELECT
       COALESCE(SUM(amount), 0) AS total_in,
@@ -78,8 +82,8 @@ router.get('/summary', async (_req, res) => {
       COALESCE(SUM(savings_growth), 0) AS total_savings,
       COALESCE(SUM(flexible_funds), 0) AS total_flexible,
       COUNT(*) AS tx_count
-    FROM transactions WHERE type = 'in'
-  `)
+    FROM transactions WHERE type = 'in' AND user_id = $1
+  `, [req.userId])
   res.json(rows[0])
 })
 
