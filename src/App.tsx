@@ -746,6 +746,87 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
   )
 }
 
+// ─── Notification Bell ───────────────────────────────────────────────────────
+
+function NotificationBell({ transactions }: { transactions: ApiTx[] }) {
+  const [open, setOpen] = useState(false)
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('tengabiz_dismissed') ?? '[]')) }
+    catch { return new Set() }
+  })
+
+  const notifications = transactions
+    .filter(tx => tx.type === 'in' && !dismissed.has(tx.id))
+    .slice(0, 10)
+    .map(tx => ({
+      id: tx.id,
+      title: `+KES ${Number(tx.amount).toLocaleString()} received`,
+      body: tx.mpesa_receipt ? `Receipt: ${tx.mpesa_receipt}` : tx.account_ref ? `Ref: ${tx.account_ref}` : 'M-PESA payment',
+      unallocated: !tx.allocated,
+    }))
+
+  function dismiss(id: string) {
+    const next = new Set(dismissed).add(id)
+    setDismissed(next)
+    localStorage.setItem('tengabiz_dismissed', JSON.stringify([...next]))
+  }
+
+  function dismissAll() {
+    const next = new Set([...dismissed, ...notifications.map(n => n.id)])
+    setDismissed(next)
+    localStorage.setItem('tengabiz_dismissed', JSON.stringify([...next]))
+    setOpen(false)
+  }
+
+  if (notifications.length === 0) return null
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="relative w-8 h-8 rounded-full bg-[#fdf8f0] border border-[#e2e8f0] flex items-center justify-center text-sm hover:bg-[#e8a020]/10"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#e8a020] text-[#0f3d22] text-[9px] font-bold flex items-center justify-center">
+          {notifications.length > 9 ? '9+' : notifications.length}
+        </span>
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-10 w-80 bg-white rounded-2xl shadow-xl border border-[#e2e8f0] z-30 overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#e2e8f0] flex items-center justify-between">
+              <p className="font-display font-bold text-sm text-[#1c1c1e]">Notifications</p>
+              <button onClick={dismissAll} className="text-xs text-[#718096] hover:text-[#1a6b3c] font-semibold">Clear all</button>
+            </div>
+            <div className="max-h-72 overflow-y-auto divide-y divide-[#f0f0f0]">
+              {notifications.map(n => (
+                <div key={n.id} className="px-4 py-3 flex items-start gap-3 hover:bg-[#f7f7f7]">
+                  <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-green-600 text-sm">↓</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-[#1c1c1e]">{n.title}</p>
+                    <p className="text-xs text-[#718096] truncate">{n.body}</p>
+                    {n.unallocated && (
+                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold mt-1 inline-block">Pending allocation</span>
+                    )}
+                  </div>
+                  <button onClick={() => dismiss(n.id)} className="text-[#c0c0c0] hover:text-[#718096] text-lg leading-none shrink-0">×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Sidebar Nav ─────────────────────────────────────────────────────────────
 
 const NAV: { id: Tab; label: string; icon: string }[] = [
@@ -864,10 +945,7 @@ export default function App() {
             <p className="text-xs text-[#718096]">Wednesday, 23 September 2026</p>
           </div>
           <div className="flex items-center gap-2">
-            <button className="relative w-8 h-8 rounded-full bg-[#fdf8f0] border border-[#e2e8f0] flex items-center justify-center text-sm hover:bg-[#e8a020]/10">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#e8a020] text-[#0f3d22] text-[9px] font-bold flex items-center justify-center">1</span>
-            </button>
+            <NotificationBell transactions={transactions} />
             <div className="w-8 h-8 rounded-full bg-[#1a6b3c] flex items-center justify-center text-white font-bold text-sm md:hidden">A</div>
           </div>
         </header>
