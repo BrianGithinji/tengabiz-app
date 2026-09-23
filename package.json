@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && cd backend && npm install && npm run build",
+    "build": "npm install && npx vite build && cd backend && npm install && npm run build",
     "start": "node backend/dist/server.js",
     "preview": "vite preview",
     "format": "oxfmt"
