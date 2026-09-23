@@ -6,7 +6,7 @@ import {
   handleTransactionTimeout,
 } from '../daraja/callback.js'
 import { validate, stkPushSchema, stkQuerySchema, transactionStatusSchema } from '../middleware/validate.js'
-import db from '../db.js'
+import pool from '../db.js'
 
 const router = Router()
 
@@ -64,14 +64,14 @@ router.post('/transaction-status', validate(transactionStatusSchema), async (req
 })
 
 // GET /api/mpesa/transactions — all transactions, newest first
-router.get('/transactions', (_req, res) => {
-  const rows = db.prepare('SELECT * FROM transactions ORDER BY created_at DESC').all()
+router.get('/transactions', async (_req, res) => {
+  const { rows } = await pool.query('SELECT * FROM transactions ORDER BY created_at DESC')
   res.json(rows)
 })
 
 // GET /api/mpesa/summary — totals for dashboard
-router.get('/summary', (_req, res) => {
-  const row = db.prepare(`
+router.get('/summary', async (_req, res) => {
+  const { rows } = await pool.query(`
     SELECT
       COALESCE(SUM(amount), 0) AS total_in,
       COALESCE(SUM(business_lock), 0) AS total_business_lock,
@@ -79,8 +79,8 @@ router.get('/summary', (_req, res) => {
       COALESCE(SUM(flexible_funds), 0) AS total_flexible,
       COUNT(*) AS tx_count
     FROM transactions WHERE type = 'in'
-  `).get()
-  res.json(row)
+  `)
+  res.json(rows[0])
 })
 
 // ── Inbound (Daraja → backend callbacks) ─────────────────────────────────────
