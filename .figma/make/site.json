@@ -1,0 +1,10 @@
+{
+  "description": "Helps Kenyan MSMEs manage finances by separating business and personal funds, tracking cash flow, saving consistently, and building loan-ready records.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

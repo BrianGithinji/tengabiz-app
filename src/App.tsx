@@ -1,0 +1,607 @@
+import { useState, useEffect } from 'react'
+import { mpesa, type Transaction as ApiTx, type Summary } from './lib/mpesa'
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type Tab = 'dashboard' | 'transactions' | 'savings' | 'reports' | 'settings'
+
+interface SavingsGoal {
+  id: string
+  name: string
+  target: number
+  saved: number
+  deadline: string
+}
+
+// ─── Live data hook ───────────────────────────────────────────────────────────
+
+function useLiveData() {
+  const [transactions, setTransactions] = useState<ApiTx[]>([])
+  const [summary, setSummary] = useState<Summary>({
+    total_in: 0, total_business_lock: 0, total_savings: 0, total_flexible: 0, tx_count: 0,
+  })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([mpesa.getTransactions(), mpesa.getSummary()])
+      .then(([txs, sum]) => { setTransactions(txs); setSummary(sum) })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  return { transactions, summary, loading }
+}
+
+// ─── Sample Data (savings goals — not yet from API) ───────────────────────────
+
+const SAVINGS_GOALS: SavingsGoal[] = [
+  { id: '1', name: 'New Display Fridge', target: 45000, saved: 28500, deadline: 'Dec 2026' },
+  { id: '2', name: 'Business License Renewal', target: 15000, saved: 9000, deadline: 'Jan 2027' },
+  { id: '3', name: 'Extra Stock Buffer', target: 20000, saved: 4200, deadline: 'Nov 2026' },
+]
+
+const CHANNEL_COLORS: Record<string, string> = {
+  mpesa: 'bg-green-100 text-green-800',
+  paybill: 'bg-blue-100 text-blue-800',
+  pochi: 'bg-amber-100 text-amber-800',
+}
+
+const CHANNEL_LABELS: Record<string, string> = {
+  mpesa: 'M-PESA Till',
+  paybill: 'PayBill',
+  pochi: 'Pochi la Biashara',
+}
+
+// ─── Components ──────────────────────────────────────────────────────────────
+
+function Badge({ channel }: { channel: string }) {
+  return (
+    <span className={`text-[10px] font-mono-data font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${CHANNEL_COLORS[channel]}`}>
+      {CHANNEL_LABELS[channel]}
+    </span>
+  )
+}
+
+function AllocationRing({ pct, color, label, amount }: { pct: number; color: string; label: string; amount: string }) {
+  const r = 30
+  const circ = 2 * Math.PI * r
+  const dash = (pct / 100) * circ
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className="relative w-20 h-20">
+        <svg viewBox="0 0 72 72" className="w-full h-full -rotate-90">
+          <circle cx="36" cy="36" r={r} fill="none" stroke="#e2e8f0" strokeWidth="7" />
+          <circle
+            cx="36" cy="36" r={r} fill="none" stroke={color} strokeWidth="7"
+            strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="font-display text-base font-bold text-[#1c1c1e]">{pct}%</span>
+        </div>
+      </div>
+      <p className="font-display text-xs font-semibold text-[#4a5568] text-center leading-tight">{label}</p>
+      <p className="font-mono-data text-sm font-semibold" style={{ color }}>{amount}</p>
+    </div>
+  )
+}
+
+function Dashboard({ transactions, summary }: { transactions: ApiTx[], summary: Summary }) {
+  const totalBalance = summary.total_in
+  const businessLock = summary.total_business_lock
+  const savings = summary.total_savings
+  const flexible = summary.total_flexible
+  const weeklyIncome = transactions
+    .filter(t => t.type === 'in')
+    .reduce((s, t) => s + t.amount, 0)
+  const weeklyExpenses = 0 // outgoing not yet tracked via Daraja
+
+  function formatDate(raw: string) {
+    if (!raw) return ''
+    const s = String(raw)
+    if (s.length === 14) {
+      return `${s.slice(6, 8)}/${s.slice(4, 6)}/${s.slice(0, 4)} ${s.slice(8, 10)}:${s.slice(10, 12)}`
+    }
+    return new Date(raw).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' })
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Balance Hero */}
+      <div
+        className="rounded-2xl p-6 text-white relative overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #1a6b3c 0%, #2d9558 60%, #e8a020 140%)' }}
+      >
+        <div className="absolute top-0 right-0 w-48 h-48 opacity-10" style={{
+          background: 'radial-gradient(circle, white 0%, transparent 70%)',
+          transform: 'translate(30%, -30%)'
+        }} />
+        <p className="text-green-100 text-sm font-medium mb-1">Total Business Balance</p>
+        <p className="font-display text-4xl font-bold mb-1 tracking-tight">
+          KES {totalBalance.toLocaleString()}
+        </p>
+        <p className="text-green-200 text-xs font-mono-data">Updated: {transactions[0] ? formatDate(transactions[0].transaction_date) : 'No transactions yet'}</p>
+
+        <div className="mt-5 flex gap-4">
+          <div className="bg-white/15 rounded-xl px-4 py-2 flex-1 text-center">
+            <p className="text-green-100 text-xs">Total Income</p>
+            <p className="font-display font-bold text-lg">+{weeklyIncome.toLocaleString()}</p>
+          </div>
+          <div className="bg-white/15 rounded-xl px-4 py-2 flex-1 text-center">
+            <p className="text-green-100 text-xs">Expenses</p>
+            <p className="font-display font-bold text-lg">-{weeklyExpenses.toLocaleString()}</p>
+          </div>
+          <div className="bg-white/15 rounded-xl px-4 py-2 flex-1 text-center">
+            <p className="text-green-100 text-xs">Net</p>
+            <p className="font-display font-bold text-lg">+{(weeklyIncome - weeklyExpenses).toLocaleString()}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* 60/20/20 Allocation */}
+      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-display text-base font-bold text-[#1c1c1e]">TENGA Allocation</h3>
+            <p className="text-xs text-[#718096]">Your money, organized automatically</p>
+          </div>
+          <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full font-semibold">60 · 20 · 20</span>
+        </div>
+        <div className="flex justify-around">
+          <AllocationRing pct={60} color="#1a6b3c" label="Business Lock" amount={`KES ${businessLock.toLocaleString()}`} />
+          <AllocationRing pct={20} color="#e8a020" label="Savings & Growth" amount={`KES ${savings.toLocaleString()}`} />
+          <AllocationRing pct={20} color="#2563eb" label="Flexible Funds" amount={`KES ${flexible.toLocaleString()}`} />
+        </div>
+      </div>
+
+      {/* Alerts */}
+      {transactions.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 items-start">
+          <div>
+            <p className="font-display font-semibold text-amber-800 text-sm">No transactions yet</p>
+            <p className="text-amber-700 text-xs mt-0.5">Payments received via M-PESA will appear here automatically.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Recent Transactions */}
+      <div className="bg-white rounded-2xl border border-[#e2e8f0] overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#e2e8f0] flex items-center justify-between">
+          <h3 className="font-display font-bold text-[#1c1c1e]">Recent Activity</h3>
+          <span className="text-xs text-[#2d9558] font-semibold cursor-pointer">See all →</span>
+        </div>
+        {transactions.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-[#718096] text-center">Transactions will appear here once payments come in.</p>
+        ) : transactions.slice(0, 5).map((tx) => (
+          <div key={tx.id} className="px-5 py-3 flex items-center gap-3 border-b border-[#f7f7f7] last:border-0 hover:bg-gray-50">
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-base ${tx.type === 'in' ? 'bg-green-50' : 'bg-red-50'}`}>
+              {tx.type === 'in' ? '↓' : '↑'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-[#1c1c1e] truncate">{tx.mpesa_receipt ?? tx.account_ref ?? 'Payment'}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[11px] text-[#718096]">{formatDate(tx.transaction_date)}</span>
+                <Badge channel={tx.channel} />
+              </div>
+            </div>
+            <div className="text-right">
+              <p className={`font-mono-data font-semibold text-sm ${tx.type === 'in' ? 'text-[#1a6b3c]' : 'text-[#e53e3e]'}`}>
+                {tx.type === 'in' ? '+' : '-'}{tx.amount.toLocaleString()}
+              </p>
+              {!tx.allocated && (
+                <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold">Pending</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Credit Score Bar */}
+      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="font-display font-bold text-[#1c1c1e]">Business Credit Score</h3>
+            <p className="text-xs text-[#718096]">Based on your transaction history</p>
+          </div>
+          <div className="text-center">
+            <p className="font-display text-2xl font-bold text-[#1a6b3c]">682</p>
+            <p className="text-xs text-green-600 font-semibold">Good</p>
+          </div>
+        </div>
+        <div className="h-2.5 bg-[#e2e8f0] rounded-full overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: '68%', background: 'linear-gradient(90deg, #e8a020, #1a6b3c)' }} />
+        </div>
+        <div className="flex justify-between mt-1">
+          <span className="text-[10px] text-[#718096]">Poor</span>
+          <span className="text-[10px] text-[#718096]">Excellent</span>
+        </div>
+        <p className="text-xs text-[#4a5568] mt-3 bg-green-50 px-3 py-2 rounded-lg border border-green-100">
+          You qualify for KES 50,000 – 150,000 business loans from M-Pawa, KCB Mtaani, and Equity Wezesha.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function Transactions({ transactions }: { transactions: ApiTx[] }) {
+  const [filter, setFilter] = useState<'all' | 'in' | 'out'>('all')
+  const filtered = filter === 'all' ? transactions : transactions.filter(t => t.type === filter)
+
+  function formatDate(raw: string) {
+    if (!raw) return ''
+    const s = String(raw)
+    if (s.length === 14) return `${s.slice(6,8)}/${s.slice(4,6)}/${s.slice(0,4)} ${s.slice(8,10)}:${s.slice(10,12)}`
+    return new Date(raw).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="font-display text-xl font-bold text-[#1c1c1e]">All Transactions</h2>
+        <p className="text-sm text-[#718096]">Every shilling, tracked and allocated</p>
+      </div>
+
+      {/* Filter pills */}
+      <div className="flex gap-2">
+        {(['all', 'in', 'out'] as const).map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition-all ${filter === f
+              ? 'bg-[#1a6b3c] text-white border-[#1a6b3c]'
+              : 'bg-white text-[#4a5568] border-[#e2e8f0] hover:border-[#1a6b3c]'}`}
+          >
+            {f === 'all' ? 'All' : f === 'in' ? '↓ Income' : '↑ Expenses'}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-[#e2e8f0] overflow-hidden">
+        {filtered.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-[#718096] text-center">No transactions found.</p>
+        ) : filtered.map((tx, i) => (
+          <div key={tx.id} className={`px-5 py-4 flex items-center gap-3 hover:bg-gray-50 ${i < filtered.length - 1 ? 'border-b border-[#f0f0f0]' : ''}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold ${tx.type === 'in' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+              {tx.type === 'in' ? '↓' : '↑'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[#1c1c1e]">{tx.mpesa_receipt ?? tx.account_ref ?? 'Payment'}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-[#718096]">{formatDate(tx.transaction_date)}</span>
+                <Badge channel={tx.channel} />
+                {!tx.allocated && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold">Needs allocation</span>}
+              </div>
+            </div>
+            <p className={`font-mono-data font-bold ${tx.type === 'in' ? 'text-[#1a6b3c]' : 'text-[#e53e3e]'}`}>
+              {tx.type === 'in' ? '+' : '-'}KES {tx.amount.toLocaleString()}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Savings() {
+  const totalSaved = SAVINGS_GOALS.reduce((s, g) => s + g.saved, 0)
+  const totalTarget = SAVINGS_GOALS.reduce((s, g) => s + g.target, 0)
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="font-display text-xl font-bold text-[#1c1c1e]">Savings & Growth</h2>
+        <p className="text-sm text-[#718096]">Building toward your business dreams</p>
+      </div>
+
+      {/* Summary */}
+      <div className="rounded-2xl p-5 text-white" style={{ background: 'linear-gradient(135deg, #e8a020 0%, #f5c054 100%)' }}>
+        <p className="text-amber-100 text-sm">Total Saved This Month</p>
+        <p className="font-display text-3xl font-bold mt-1">KES {totalSaved.toLocaleString()}</p>
+        <div className="mt-3 h-2 bg-white/30 rounded-full">
+          <div className="h-full bg-white rounded-full" style={{ width: `${(totalSaved / totalTarget) * 100}%` }} />
+        </div>
+        <p className="text-amber-100 text-xs mt-1">{Math.round((totalSaved / totalTarget) * 100)}% of KES {totalTarget.toLocaleString()} total goal</p>
+      </div>
+
+      {/* Goals */}
+      <div className="space-y-3">
+        {SAVINGS_GOALS.map(goal => {
+          const pct = Math.round((goal.saved / goal.target) * 100)
+          return (
+            <div key={goal.id} className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div>
+                    <p className="font-display font-bold text-[#1c1c1e]">{goal.name}</p>
+                    <p className="text-xs text-[#718096]">Target: {goal.deadline}</p>
+                  </div>
+                </div>
+                <span className="font-mono-data text-sm font-bold text-[#e8a020]">{pct}%</span>
+              </div>
+              <div className="h-2.5 bg-[#f0f0f0] rounded-full mb-2">
+                <div className="h-full rounded-full bg-[#e8a020]" style={{ width: `${pct}%` }} />
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs font-mono-data text-[#1a6b3c] font-semibold">KES {goal.saved.toLocaleString()} saved</span>
+                <span className="text-xs font-mono-data text-[#718096]">of KES {goal.target.toLocaleString()}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <button className="w-full py-3 rounded-xl border-2 border-dashed border-[#e2e8f0] text-[#718096] font-semibold text-sm hover:border-[#1a6b3c] hover:text-[#1a6b3c]">
+        + Add New Savings Goal
+      </button>
+    </div>
+  )
+}
+
+function Reports() {
+  const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
+  const income =  [42000, 38500, 51000, 47200, 55000, 61800]
+  const expenses = [29000, 27000, 33000, 31000, 36000, 39000]
+  const maxVal = Math.max(...income)
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="font-display text-xl font-bold text-[#1c1c1e]">Business Reports</h2>
+        <p className="text-sm text-[#718096]">Your financial story, ready for lenders</p>
+      </div>
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { label: 'Avg Monthly Revenue', val: 'KES 49,250', delta: '+14%', up: true },
+          { label: 'Avg Monthly Expenses', val: 'KES 32,500', delta: '+8%', up: false },
+          { label: 'Avg Net Profit', val: 'KES 16,750', delta: '+22%', up: true },
+          { label: 'Savings Rate', val: '20%', delta: 'Consistent', up: true },
+        ].map(s => (
+          <div key={s.label} className="bg-white rounded-xl p-4 border border-[#e2e8f0]">
+            <p className="text-xs text-[#718096] mb-1">{s.label}</p>
+            <p className="font-display font-bold text-lg text-[#1c1c1e]">{s.val}</p>
+            <p className={`text-xs font-semibold ${s.up ? 'text-green-600' : 'text-red-500'}`}>{s.delta} vs last period</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Bar chart */}
+      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
+        <h3 className="font-display font-bold text-[#1c1c1e] mb-1">Income vs Expenses</h3>
+        <p className="text-xs text-[#718096] mb-4">Last 6 months (KES)</p>
+        <div className="flex items-end gap-2 h-36">
+          {months.map((m, i) => (
+            <div key={m} className="flex-1 flex flex-col items-center gap-0.5">
+              <div className="w-full flex gap-0.5 items-end" style={{ height: 120 }}>
+                <div
+                  className="flex-1 rounded-t bg-[#1a6b3c]"
+                  style={{ height: `${(income[i] / maxVal) * 100}%` }}
+                />
+                <div
+                  className="flex-1 rounded-t bg-[#e8a020]"
+                  style={{ height: `${(expenses[i] / maxVal) * 100}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-[#718096] font-mono-data">{m}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-4 mt-3">
+          <span className="flex items-center gap-1 text-xs"><span className="w-2 h-2 rounded-full bg-[#1a6b3c] inline-block" /> Income</span>
+          <span className="flex items-center gap-1 text-xs"><span className="w-2 h-2 rounded-full bg-[#e8a020] inline-block" /> Expenses</span>
+        </div>
+      </div>
+
+      {/* Loan readiness */}
+      <div className="bg-green-50 border border-green-200 rounded-2xl p-5">
+        <p className="font-display font-bold text-[#1a6b3c] mb-1">Loan Readiness Report</p>
+        <p className="text-sm text-[#4a5568] mb-3">Your TENGABIZ records are ready to share with lenders. 6 months of verified transactions on file.</p>
+        <div className="space-y-2">
+          {[
+            { label: 'Business age verified', ok: true },
+            { label: 'Consistent income history', ok: true },
+            { label: 'Savings discipline shown', ok: true },
+            { label: 'Low debt-to-income ratio', ok: true },
+            { label: 'Tax PIN registered', ok: false },
+          ].map(item => (
+            <div key={item.label} className="flex items-center gap-2">
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${item.ok ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-500'}`}>
+                {item.ok ? '✓' : '○'}
+              </span>
+              <span className={`text-sm ${item.ok ? 'text-[#1c1c1e]' : 'text-[#718096]'}`}>{item.label}</span>
+            </div>
+          ))}
+        </div>
+        <button className="mt-4 w-full py-2.5 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22]">
+          Download PDF Statement
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function Settings() {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="font-display text-xl font-bold text-[#1c1c1e]">Business Profile</h2>
+        <p className="text-sm text-[#718096]">Your business details and payment channels</p>
+      </div>
+
+      {/* Business info */}
+      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0] space-y-4">
+        <h3 className="font-display font-bold text-[#1c1c1e]">Mama Aisha Groceries</h3>
+        <div className="space-y-3">
+          {[
+            { label: 'Business Owner', val: 'Aisha Otieno' },
+            { label: 'Business Type', val: 'Mama Mboga / Kiosk' },
+            { label: 'Location', val: 'Gikomba Market, Nairobi' },
+            { label: 'Phone', val: '0712 345 678' },
+          ].map(f => (
+            <div key={f.label} className="flex justify-between py-2 border-b border-[#f0f0f0] last:border-0">
+              <span className="text-sm text-[#718096]">{f.label}</span>
+              <span className="text-sm font-medium text-[#1c1c1e]">{f.val}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Payment channels */}
+      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
+        <h3 className="font-display font-bold text-[#1c1c1e] mb-3">Connected Channels</h3>
+        <div className="space-y-3">
+          {[
+            { name: 'M-PESA Till Number', id: '174823', active: true, color: 'bg-green-500' },
+            { name: 'Pochi la Biashara', id: '0712 345 678', active: true, color: 'bg-amber-500' },
+            { name: 'PayBill', id: 'Not connected', active: false, color: 'bg-gray-300' },
+          ].map(ch => (
+            <div key={ch.name} className="flex items-center gap-3 py-2 border-b border-[#f0f0f0] last:border-0">
+              <div className={`w-2.5 h-2.5 rounded-full ${ch.color}`} />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-[#1c1c1e]">{ch.name}</p>
+                <p className="text-xs text-[#718096] font-mono-data">{ch.id}</p>
+              </div>
+              <button className={`text-xs px-3 py-1 rounded-full font-semibold ${ch.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-[#718096] hover:bg-green-50 hover:text-green-700'}`}>
+                {ch.active ? 'Connected' : 'Connect'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Allocation model */}
+      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
+        <h3 className="font-display font-bold text-[#1c1c1e] mb-1">Allocation Model</h3>
+        <p className="text-xs text-[#718096] mb-4">How TENGABIZ splits incoming money</p>
+        {[
+          { label: 'Business Lock', pct: 60, color: '#1a6b3c' },
+          { label: 'Savings & Growth', pct: 20, color: '#e8a020' },
+          { label: 'Flexible Funds', pct: 20, color: '#2563eb' },
+        ].map(a => (
+          <div key={a.label} className="flex items-center gap-3 mb-3 last:mb-0">
+            <div className="w-3 h-3 rounded-full" style={{ background: a.color }} />
+            <span className="flex-1 text-sm text-[#1c1c1e]">{a.label}</span>
+            <span className="font-mono-data font-bold text-sm" style={{ color: a.color }}>{a.pct}%</span>
+          </div>
+        ))}
+        <button className="mt-3 text-xs text-[#718096] hover:text-[#1a6b3c] font-semibold">Customize splits →</button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Sidebar Nav ─────────────────────────────────────────────────────────────
+
+const NAV: { id: Tab; label: string; icon: string }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
+  { id: 'transactions', label: 'Transactions', icon: '↕' },
+  { id: 'savings', label: 'Savings', icon: '◎' },
+  { id: 'reports', label: 'Reports', icon: '▦' },
+  { id: 'settings', label: 'Profile', icon: '⚙' },
+]
+
+// ─── App Shell ────────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [tab, setTab] = useState<Tab>('dashboard')
+  const { transactions, summary, loading } = useLiveData()
+
+  return (
+    <div className="min-h-screen bg-[#fdf8f0] flex">
+      {/* Sidebar */}
+      <aside className="hidden md:flex flex-col w-56 bg-[#0f3d22] text-white shrink-0 py-6 px-4 sticky top-0 h-screen">
+        {/* Logo */}
+        <div className="mb-8 px-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-[#e8a020] flex items-center justify-center font-display font-black text-[#0f3d22] text-sm">T</div>
+            <span className="font-display font-black text-xl tracking-tight">TENGABIZ</span>
+          </div>
+          <p className="text-green-400 text-[10px] mt-1 font-mono-data">Smart Business Finance</p>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex flex-col gap-1 flex-1">
+          {NAV.map(n => (
+            <button
+              key={n.id}
+              onClick={() => setTab(n.id)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-left transition-all ${
+                tab === n.id
+                  ? 'bg-[#e8a020] text-[#0f3d22]'
+                  : 'text-green-200 hover:bg-white/10'
+              }`}
+            >
+              <span className="text-base w-5 text-center">{n.icon}</span>
+              {n.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Bottom profile */}
+        <div className="mt-4 px-2 pt-4 border-t border-white/10">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-[#e8a020] flex items-center justify-center text-[#0f3d22] font-bold text-sm">A</div>
+            <div>
+              <p className="text-xs font-semibold text-white">Mama Aisha</p>
+              <p className="text-[10px] text-green-400">Gikomba Market</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <main className="flex-1 flex flex-col min-h-screen">
+        {/* Top bar */}
+        <header className="bg-white border-b border-[#e2e8f0] px-5 py-3 flex items-center justify-between sticky top-0 z-10">
+          <div className="flex items-center gap-2 md:hidden">
+            <div className="w-7 h-7 rounded-lg bg-[#e8a020] flex items-center justify-center font-display font-black text-[#0f3d22] text-xs">T</div>
+            <span className="font-display font-black text-lg tracking-tight text-[#0f3d22]">TENGABIZ</span>
+          </div>
+          <div className="hidden md:block">
+            <p className="font-display font-bold text-[#1c1c1e] capitalize">{tab}</p>
+            <p className="text-xs text-[#718096]">Wednesday, 23 September 2026</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="relative w-8 h-8 rounded-full bg-[#fdf8f0] border border-[#e2e8f0] flex items-center justify-center text-sm hover:bg-[#e8a020]/10">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#e8a020] text-[#0f3d22] text-[9px] font-bold flex items-center justify-center">1</span>
+            </button>
+            <div className="w-8 h-8 rounded-full bg-[#1a6b3c] flex items-center justify-center text-white font-bold text-sm md:hidden">A</div>
+          </div>
+        </header>
+
+        {/* Page */}
+        <div className="flex-1 p-5 md:p-6 max-w-2xl w-full mx-auto">
+          {loading ? (
+            <div className="flex items-center justify-center h-40">
+              <p className="text-sm text-[#718096]">Loading...</p>
+            </div>
+          ) : (
+            <>
+              {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} />}
+              {tab === 'transactions' && <Transactions transactions={transactions} />}
+              {tab === 'savings' && <Savings />}
+              {tab === 'reports' && <Reports />}
+              {tab === 'settings' && <Settings />}
+            </>
+          )}
+        </div>
+
+        {/* Mobile bottom nav */}
+        <nav className="md:hidden sticky bottom-0 bg-white border-t border-[#e2e8f0] flex justify-around py-2 z-10">
+          {NAV.map(n => (
+            <button
+              key={n.id}
+              onClick={() => setTab(n.id)}
+              className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg ${tab === n.id ? 'text-[#1a6b3c]' : 'text-[#718096]'}`}
+            >
+              <span className="text-lg">{n.icon}</span>
+              <span className="text-[10px] font-semibold">{n.label}</span>
+            </button>
+          ))}
+        </nav>
+      </main>
+    </div>
+  )
+}
