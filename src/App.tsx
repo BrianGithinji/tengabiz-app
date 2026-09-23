@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { mpesa, auth, channels, type Transaction as ApiTx, type Summary, type Channel } from './lib/mpesa'
+import logo from './logo.png'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -93,11 +94,12 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser) => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#fdf8f0] flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center p-4 relative"
+      style={{ backgroundImage: `url(/tenga.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="w-full max-w-sm relative z-10">
         <div className="flex items-center gap-2 justify-center mb-8">
-          <div className="w-10 h-10 rounded-xl bg-[#e8a020] flex items-center justify-center font-black text-[#0f3d22] text-lg">T</div>
-          <span className="font-black text-2xl tracking-tight text-[#0f3d22]">TENGABIZ</span>
+          <img src={logo} alt="TENGABIZ" className="h-28 w-auto" />
         </div>
         <div className="bg-white rounded-2xl p-6 border border-[#e2e8f0] shadow-sm">
           <div className="flex gap-1 mb-6 bg-[#f7f7f7] rounded-xl p-1">
@@ -154,7 +156,7 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser) => void }) {
             </form>
           )}
         </div>
-        <p className="text-center text-xs text-[#718096] mt-4">Smart Business Finance for Kenyan MSMEs</p>
+        <p className="text-center text-xs text-white/70 mt-4">Smart Business Finance for Kenyan MSMEs</p>
       </div>
     </div>
   )
@@ -696,10 +698,7 @@ export default function App() {
       <aside className="hidden md:flex flex-col w-56 bg-[#0f3d22] text-white shrink-0 py-6 px-4 sticky top-0 h-screen">
         {/* Logo */}
         <div className="mb-8 px-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#e8a020] flex items-center justify-center font-display font-black text-[#0f3d22] text-sm">T</div>
-            <span className="font-display font-black text-xl tracking-tight">TENGABIZ</span>
-          </div>
+          <img src={logo} alt="TENGABIZ" className="h-16 w-auto" />
           <p className="text-green-400 text-[10px] mt-1 font-mono-data">Smart Business Finance</p>
         </div>
 
@@ -738,8 +737,7 @@ export default function App() {
         {/* Top bar */}
         <header className="bg-white border-b border-[#e2e8f0] px-5 py-3 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-2 md:hidden">
-            <div className="w-7 h-7 rounded-lg bg-[#e8a020] flex items-center justify-center font-display font-black text-[#0f3d22] text-xs">T</div>
-            <span className="font-display font-black text-lg tracking-tight text-[#0f3d22]">TENGABIZ</span>
+            <img src={logo} alt="TENGABIZ" className="h-12 w-auto" />
           </div>
           <div className="hidden md:block">
             <p className="font-display font-bold text-[#1c1c1e] capitalize">{tab}</p>
