@@ -7,6 +7,7 @@ import mpesaRoutes from './routes/mpesa.js'
 import paymentsRoutes from './routes/payments.js'
 import authRoutes from './routes/auth.js'
 import channelsRoutes from './routes/channels.js'
+import passport from './passport.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -15,6 +16,7 @@ const PORT = process.env.PORT ?? 3000
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:8443' }))
 app.use(express.json())
+app.use(passport.initialize())
 
 // ── Static frontend ──────────────────────────────────────────────────────────
 const distPath = path.join(__dirname, '../../dist')
@@ -41,7 +43,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Internal server error' })
 })
 
-app.listen(PORT, () => {
-  console.log(`TENGABIZ API running on http://localhost:${PORT}`)
+app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`TENGABIZ API running on http://0.0.0.0:${PORT}`)
   console.log(`M-PESA environment: ${process.env.MPESA_ENV ?? 'sandbox'}`)
 })

@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto'
 import pool from '../db.js'
 import { requireAuth, type AuthRequest } from '../middleware/auth.js'
 import { z } from 'zod'
+import passport from '../passport.js'
 
 const router = Router()
 
@@ -94,5 +95,21 @@ router.get('/me', requireAuth, async (req: AuthRequest, res) => {
   if (rows.length === 0) { res.status(404).json({ error: 'User not found' }); return }
   res.json(rows[0])
 })
+
+// ── Google OAuth ──────────────────────────────────────────────────────────────
+
+// GET /api/auth/google — redirect to Google
+router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }))
+
+// GET /api/auth/google/callback — Google redirects here after login
+router.get('/google/callback',
+  passport.authenticate('google', { session: false, failureRedirect: '/?error=google_failed' }),
+  (req, res) => {
+    const user = req.user as any
+    const token = signToken(user.id)
+    // Redirect to frontend with token in query param — frontend stores it
+    res.redirect(`/?token=${token}&businessName=${encodeURIComponent(user.business_name)}&ownerName=${encodeURIComponent(user.owner_name)}`)
+  }
+)
 
 export default router
