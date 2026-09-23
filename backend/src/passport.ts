@@ -18,7 +18,7 @@ passport.use(new GoogleStrategy({
     const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email])
 
     if (rows.length > 0) {
-      return done(null, rows[0])
+      return done(null, { ...rows[0], is_new: false })
     }
 
     const id = randomUUID()
@@ -28,7 +28,7 @@ passport.use(new GoogleStrategy({
       [id, email, 'google-oauth', name, name]
     )
 
-    return done(null, newRows[0])
+    return done(null, { ...newRows[0], is_new: true })
   } catch (err) {
     return done(err as Error)
   }

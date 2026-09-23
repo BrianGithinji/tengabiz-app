@@ -6,6 +6,7 @@ import logo from './logo.png'
 
 type Tab = 'dashboard' | 'transactions' | 'savings' | 'reports' | 'settings'
 type AuthScreen = 'login' | 'register'
+type AppScreen = 'app' | 'setup'
 
 interface SavingsGoal {
   id: string
@@ -19,6 +20,86 @@ interface SessionUser {
   businessName: string
   ownerName: string
   token: string
+}
+
+// ─── Setup Channel Screen (shown once after Google OAuth) ─────────────────────
+
+function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessName: string) => void }) {
+  const [form, setForm] = useState({ businessName: user.businessName === user.ownerName ? '' : user.businessName, type: 'till' as 'till' | 'paybill' | 'pochi', identifier: '', label: '' })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault(); setError(''); setLoading(true)
+    try {
+      if (form.businessName.trim()) {
+        await fetch('/api/auth/update-profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+          body: JSON.stringify({ businessName: form.businessName.trim() }),
+        })
+      }
+      await channels.add({ type: form.type, identifier: form.identifier, label: form.label || undefined })
+      onDone(form.businessName.trim() || user.businessName)
+    } catch (err: any) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 relative"
+      style={{ backgroundImage: `url(/tenga.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="w-full max-w-sm relative z-10">
+        <div className="flex justify-center mb-6">
+          <img src={logo} alt="TENGABIZ" className="h-20 w-auto" />
+        </div>
+        <div className="bg-white rounded-2xl p-6 border border-[#e2e8f0] shadow-sm">
+          <div className="mb-5">
+            <p className="font-display text-lg font-bold text-[#1c1c1e]">Welcome, {user.ownerName.split(' ')[0]}! 👋</p>
+            <p className="text-sm text-[#718096] mt-1">Set up your business to start tracking payments.</p>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-[#4a5568] block mb-1">Business Name</label>
+              <input required value={form.businessName}
+                placeholder="e.g. Mama Njeri's Shop"
+                onChange={e => setForm(f => ({ ...f, businessName: e.target.value }))}
+                className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#4a5568] block mb-1">Payment Channel Type</label>
+              <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as any }))}
+                className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c] bg-white">
+                <option value="till">M-PESA Till Number</option>
+                <option value="paybill">PayBill Shortcode</option>
+                <option value="pochi">Pochi la Biashara (Phone)</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#4a5568] block mb-1">
+                {form.type === 'pochi' ? 'Phone Number' : 'Shortcode / Number'}
+              </label>
+              <input required value={form.identifier}
+                placeholder={form.type === 'pochi' ? '0712345678' : form.type === 'till' ? '174379' : '600984'}
+                onChange={e => setForm(f => ({ ...f, identifier: e.target.value }))}
+                className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#4a5568] block mb-1">Label (optional)</label>
+              <input value={form.label} placeholder="e.g. Main Shop Till"
+                onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+                className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+            </div>
+            {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+            <button type="submit" disabled={loading}
+              className="w-full py-3 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22] disabled:opacity-60">
+              {loading ? 'Saving...' : 'Save & Go to Dashboard'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ─── Live data hook ───────────────────────────────────────────────────────────
@@ -679,16 +760,18 @@ const NAV: { id: Tab; label: string; icon: string }[] = [
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('dashboard')
+  const [screen, setScreen] = useState<AppScreen>('app')
   const [user, setUser] = useState<SessionUser | null>(() => {
-    // Check for Google OAuth redirect token in URL
     const params = new URLSearchParams(window.location.search)
     const urlToken = params.get('token')
     const urlBusiness = params.get('businessName')
     const urlOwner = params.get('ownerName')
+    const isNew = params.get('isNew') === '1'
     if (urlToken && urlBusiness && urlOwner) {
       localStorage.setItem('tengabiz_token', urlToken)
       localStorage.setItem('tengabiz_business', urlBusiness)
       localStorage.setItem('tengabiz_owner', urlOwner)
+      if (isNew) localStorage.setItem('tengabiz_setup', '1')
       window.history.replaceState({}, '', '/')
       return { token: urlToken, businessName: urlBusiness, ownerName: urlOwner }
     }
@@ -697,12 +780,26 @@ export default function App() {
     const owner = localStorage.getItem('tengabiz_owner')
     return token && name && owner ? { token, businessName: name, ownerName: owner } : null
   })
+
+  useEffect(() => {
+    if (user && localStorage.getItem('tengabiz_setup') === '1') {
+      setScreen('setup')
+    }
+  }, [user])
+
   const { transactions, summary, loading } = useLiveData()
 
   function handleAuthSuccess(u: SessionUser) {
     localStorage.setItem('tengabiz_business', u.businessName)
     localStorage.setItem('tengabiz_owner', u.ownerName)
     setUser(u)
+  }
+
+  function handleSetupDone(businessName: string) {
+    localStorage.removeItem('tengabiz_setup')
+    localStorage.setItem('tengabiz_business', businessName)
+    setUser(u => u ? { ...u, businessName } : u)
+    setScreen('app')
   }
 
   function handleLogout() {
@@ -713,6 +810,7 @@ export default function App() {
   }
 
   if (!user) return <AuthPage onSuccess={handleAuthSuccess} />
+  if (screen === 'setup') return <SetupChannel user={user} onDone={handleSetupDone} />
 
   return (
     <div className="min-h-screen bg-[#fdf8f0] flex">

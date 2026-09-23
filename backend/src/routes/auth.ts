@@ -96,6 +96,14 @@ router.get('/me', requireAuth, async (req: AuthRequest, res) => {
   res.json(rows[0])
 })
 
+// PATCH /api/auth/update-profile
+router.patch('/update-profile', requireAuth, async (req: AuthRequest, res) => {
+  const { businessName } = req.body
+  if (!businessName?.trim()) { res.status(400).json({ error: 'businessName required' }); return }
+  await pool.query('UPDATE users SET business_name = $1 WHERE id = $2', [businessName.trim(), req.userId])
+  res.json({ success: true })
+})
+
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 
 // GET /api/auth/google — redirect to Google
@@ -107,8 +115,7 @@ router.get('/google/callback',
   (req, res) => {
     const user = req.user as any
     const token = signToken(user.id)
-    // Redirect to frontend with token in query param — frontend stores it
-    res.redirect(`/?token=${token}&businessName=${encodeURIComponent(user.business_name)}&ownerName=${encodeURIComponent(user.owner_name)}`)
+    res.redirect(`/?token=${token}&businessName=${encodeURIComponent(user.business_name)}&ownerName=${encodeURIComponent(user.owner_name)}&isNew=${user.is_new ? '1' : '0'}`)
   }
 )
 
