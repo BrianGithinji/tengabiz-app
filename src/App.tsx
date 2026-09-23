@@ -8,14 +8,6 @@ type Tab = 'dashboard' | 'transactions' | 'savings' | 'reports' | 'settings'
 type AuthScreen = 'login' | 'register'
 type AppScreen = 'app' | 'setup'
 
-interface SavingsGoal {
-  id: string
-  name: string
-  target: number
-  saved: number
-  deadline: string
-}
-
 interface SessionUser {
   businessName: string
   ownerName: string
@@ -121,13 +113,54 @@ function useLiveData() {
   return { transactions, summary, loading }
 }
 
-// ─── Sample Data (savings goals — not yet from API) ───────────────────────────
+// ─── Credit Score Formula ─────────────────────────────────────────────────────
+// Range: 300–850 (FICO-style), 4 factors × ~137pts each
+// 1. Volume      — total income vs KES 500k ceiling
+// 2. Frequency   — tx count vs 100 ceiling
+// 3. Savings     — savings / total_in vs 20% target
+// 4. Consistency — active months in last 6
 
-const SAVINGS_GOALS: SavingsGoal[] = [
-  { id: '1', name: 'New Display Fridge', target: 45000, saved: 28500, deadline: 'Dec 2026' },
-  { id: '2', name: 'Business License Renewal', target: 15000, saved: 9000, deadline: 'Jan 2027' },
-  { id: '3', name: 'Extra Stock Buffer', target: 20000, saved: 4200, deadline: 'Nov 2026' },
-]
+function calcCreditScore(transactions: ApiTx[], summary: Summary) {
+  const inTx = transactions.filter(t => t.type === 'in')
+  const totalIn = Number(summary.total_in) || 0
+  const totalSavings = Number(summary.total_savings) || 0
+
+  const volumePts = Math.round(Math.min(totalIn / 500_000, 1) * 137)
+  const freqPts = Math.round(Math.min(inTx.length / 100, 1) * 138)
+  const savingsPts = Math.round(Math.min(totalIn > 0 ? (totalSavings / totalIn) / 0.20 : 0, 1) * 137)
+
+  const now = new Date()
+  const activeMonths = new Set(
+    inTx.map(tx => {
+      const raw = String(tx.transaction_date)
+      const d = raw.length === 14
+        ? new Date(`${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`)
+        : new Date(raw)
+      const ago = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth())
+      return ago >= 0 && ago < 6 ? `${d.getFullYear()}-${d.getMonth()}` : null
+    }).filter(Boolean)
+  ).size
+  const consistencyPts = Math.round(Math.min(activeMonths / 6, 1) * 138)
+
+  const score = 300 + volumePts + freqPts + savingsPts + consistencyPts
+  const label = score >= 750 ? 'Excellent' : score >= 700 ? 'Very Good' : score >= 650 ? 'Good' : score >= 580 ? 'Fair' : 'Poor'
+  const color = score >= 700 ? '#1a6b3c' : score >= 580 ? '#e8a020' : '#e53e3e'
+  const loanMax = Math.round((score - 300) / 550 * 500_000 / 1000) * 1000
+  const loanMin = Math.round(loanMax * 0.3 / 1000) * 1000
+  const loanRange = loanMax < 10_000
+    ? 'Build more transaction history to qualify'
+    : `KES ${loanMin.toLocaleString()} – ${loanMax.toLocaleString()}`
+
+  return {
+    score, label, color, loanRange,
+    factors: [
+      { name: 'Transaction Volume', pts: volumePts, max: 137 },
+      { name: 'Payment Frequency', pts: freqPts, max: 138 },
+      { name: 'Savings Discipline', pts: savingsPts, max: 137 },
+      { name: 'Income Consistency', pts: consistencyPts, max: 138 },
+    ],
+  }
+}
 
 const CHANNEL_COLORS: Record<string, string> = {
   mpesa: 'bg-green-100 text-green-800',
@@ -395,29 +428,47 @@ function Dashboard({ transactions, summary }: { transactions: ApiTx[], summary: 
         ))}
       </div>
 
-      {/* Credit Score Bar */}
-      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="font-display font-bold text-[#1c1c1e]">Business Credit Score</h3>
-            <p className="text-xs text-[#718096]">Based on your transaction history</p>
+      {/* Credit Score */}
+      {(() => {
+        const cs = calcCreditScore(transactions, summary)
+        return (
+          <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="font-display font-bold text-[#1c1c1e]">Business Credit Score</h3>
+                <p className="text-xs text-[#718096]">Calculated from your transaction history</p>
+              </div>
+              <div className="text-center">
+                <p className="font-display text-2xl font-bold" style={{ color: cs.color }}>{cs.score}</p>
+                <p className="text-xs font-semibold" style={{ color: cs.color }}>{cs.label}</p>
+              </div>
+            </div>
+            <div className="h-2.5 bg-[#e2e8f0] rounded-full overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${((cs.score - 300) / 550) * 100}%`, background: 'linear-gradient(90deg, #e8a020, #1a6b3c)' }} />
+            </div>
+            <div className="flex justify-between mt-1 mb-3">
+              <span className="text-[10px] text-[#718096]">Poor (300)</span>
+              <span className="text-[10px] text-[#718096]">Excellent (850)</span>
+            </div>
+            <div className="space-y-2">
+              {cs.factors.map(f => (
+                <div key={f.name}>
+                  <div className="flex justify-between text-xs mb-0.5">
+                    <span className="text-[#4a5568]">{f.name}</span>
+                    <span className="font-mono-data font-semibold text-[#1c1c1e]">{f.pts}/{f.max}</span>
+                  </div>
+                  <div className="h-1.5 bg-[#e2e8f0] rounded-full">
+                    <div className="h-full rounded-full bg-[#1a6b3c]" style={{ width: `${(f.pts / f.max) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-[#4a5568] mt-3 bg-green-50 px-3 py-2 rounded-lg border border-green-100">
+              Estimated loan range: {cs.loanRange}
+            </p>
           </div>
-          <div className="text-center">
-            <p className="font-display text-2xl font-bold text-[#1a6b3c]">682</p>
-            <p className="text-xs text-green-600 font-semibold">Good</p>
-          </div>
-        </div>
-        <div className="h-2.5 bg-[#e2e8f0] rounded-full overflow-hidden">
-          <div className="h-full rounded-full" style={{ width: '68%', background: 'linear-gradient(90deg, #e8a020, #1a6b3c)' }} />
-        </div>
-        <div className="flex justify-between mt-1">
-          <span className="text-[10px] text-[#718096]">Poor</span>
-          <span className="text-[10px] text-[#718096]">Excellent</span>
-        </div>
-        <p className="text-xs text-[#4a5568] mt-3 bg-green-50 px-3 py-2 rounded-lg border border-green-100">
-          You qualify for KES 50,000 – 150,000 business loans from M-Pawa, KCB Mtaani, and Equity Wezesha.
-        </p>
-      </div>
+        )
+      })()}
     </div>
   )
 }
@@ -481,9 +532,10 @@ function Transactions({ transactions }: { transactions: ApiTx[] }) {
   )
 }
 
-function Savings() {
-  const totalSaved = SAVINGS_GOALS.reduce((s, g) => s + g.saved, 0)
-  const totalTarget = SAVINGS_GOALS.reduce((s, g) => s + g.target, 0)
+function Savings({ summary }: { summary: Summary }) {
+  const totalIn = Number(summary.total_in) || 0
+  const totalSavings = Number(summary.total_savings) || 0
+  const savingsRate = totalIn > 0 ? Math.round((totalSavings / totalIn) * 100) : 0
 
   return (
     <div className="space-y-5">
@@ -492,55 +544,67 @@ function Savings() {
         <p className="text-sm text-[#718096]">Building toward your business dreams</p>
       </div>
 
-      {/* Summary */}
       <div className="rounded-2xl p-5 text-white" style={{ background: 'linear-gradient(135deg, #e8a020 0%, #f5c054 100%)' }}>
-        <p className="text-amber-100 text-sm">Total Saved This Month</p>
-        <p className="font-display text-3xl font-bold mt-1">KES {totalSaved.toLocaleString()}</p>
+        <p className="text-amber-100 text-sm">Total Savings Accumulated</p>
+        <p className="font-display text-3xl font-bold mt-1">KES {totalSavings.toLocaleString()}</p>
         <div className="mt-3 h-2 bg-white/30 rounded-full">
-          <div className="h-full bg-white rounded-full" style={{ width: `${(totalSaved / totalTarget) * 100}%` }} />
+          <div className="h-full bg-white rounded-full" style={{ width: `${Math.min(savingsRate / 20 * 100, 100)}%` }} />
         </div>
-        <p className="text-amber-100 text-xs mt-1">{Math.round((totalSaved / totalTarget) * 100)}% of KES {totalTarget.toLocaleString()} total goal</p>
+        <p className="text-amber-100 text-xs mt-1">{savingsRate}% savings rate (target: 20% of income)</p>
       </div>
 
-      {/* Goals */}
-      <div className="space-y-3">
-        {SAVINGS_GOALS.map(goal => {
-          const pct = Math.round((goal.saved / goal.target) * 100)
-          return (
-            <div key={goal.id} className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div>
-                    <p className="font-display font-bold text-[#1c1c1e]">{goal.name}</p>
-                    <p className="text-xs text-[#718096]">Target: {goal.deadline}</p>
-                  </div>
-                </div>
-                <span className="font-mono-data text-sm font-bold text-[#e8a020]">{pct}%</span>
-              </div>
-              <div className="h-2.5 bg-[#f0f0f0] rounded-full mb-2">
-                <div className="h-full rounded-full bg-[#e8a020]" style={{ width: `${pct}%` }} />
-              </div>
-              <div className="flex justify-between">
-                <span className="text-xs font-mono-data text-[#1a6b3c] font-semibold">KES {goal.saved.toLocaleString()} saved</span>
-                <span className="text-xs font-mono-data text-[#718096]">of KES {goal.target.toLocaleString()}</span>
-              </div>
+      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0] space-y-3">
+        <h3 className="font-display font-bold text-[#1c1c1e]">Allocation Breakdown</h3>
+        {[
+          { label: 'Business Lock (60%)', val: Number(summary.total_business_lock), color: '#1a6b3c' },
+          { label: 'Savings & Growth (20%)', val: totalSavings, color: '#e8a020' },
+          { label: 'Flexible Funds (20%)', val: Number(summary.total_flexible), color: '#2563eb' },
+        ].map(r => (
+          <div key={r.label} className="flex items-center justify-between py-2 border-b border-[#f0f0f0] last:border-0">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ background: r.color }} />
+              <span className="text-sm text-[#4a5568]">{r.label}</span>
             </div>
-          )
-        })}
+            <span className="font-mono-data font-semibold text-sm" style={{ color: r.color }}>KES {r.val.toLocaleString()}</span>
+          </div>
+        ))}
       </div>
 
-      <button className="w-full py-3 rounded-xl border-2 border-dashed border-[#e2e8f0] text-[#718096] font-semibold text-sm hover:border-[#1a6b3c] hover:text-[#1a6b3c]">
-        + Add New Savings Goal
-      </button>
+      {totalIn === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <p className="text-sm text-amber-800 font-semibold">No savings data yet</p>
+          <p className="text-xs text-amber-700 mt-0.5">Savings are automatically calculated from incoming M-PESA payments.</p>
+        </div>
+      )}
     </div>
   )
 }
 
-function Reports() {
-  const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
-  const income =  [42000, 38500, 51000, 47200, 55000, 61800]
-  const expenses = [29000, 27000, 33000, 31000, 36000, 39000]
-  const maxVal = Math.max(...income)
+function Reports({ transactions, summary }: { transactions: ApiTx[], summary: Summary }) {
+  const now = new Date()
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
+    return { label: d.toLocaleString('en-KE', { month: 'short' }), year: d.getFullYear(), month: d.getMonth() }
+  })
+  const incomeByMonth = months.map(m =>
+    transactions
+      .filter(tx => {
+        if (tx.type !== 'in') return false
+        const raw = String(tx.transaction_date)
+        const d = raw.length === 14
+          ? new Date(`${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`)
+          : new Date(raw)
+        return d.getFullYear() === m.year && d.getMonth() === m.month
+      })
+      .reduce((s, tx) => s + Number(tx.amount), 0)
+  )
+  const maxVal = Math.max(...incomeByMonth, 1)
+  const totalIn = Number(summary.total_in) || 0
+  const totalSavings = Number(summary.total_savings) || 0
+  const activeMonths = incomeByMonth.filter(v => v > 0).length
+  const avgMonthly = activeMonths > 0 ? Math.round(totalIn / activeMonths) : 0
+  const savingsRate = totalIn > 0 ? Math.round((totalSavings / totalIn) * 100) : 0
+  const cs = calcCreditScore(transactions, summary)
 
   return (
     <div className="space-y-5">
@@ -549,72 +613,63 @@ function Reports() {
         <p className="text-sm text-[#718096]">Your financial story, ready for lenders</p>
       </div>
 
-      {/* Summary stats */}
       <div className="grid grid-cols-2 gap-3">
         {[
-          { label: 'Avg Monthly Revenue', val: 'KES 49,250', delta: '+14%', up: true },
-          { label: 'Avg Monthly Expenses', val: 'KES 32,500', delta: '+8%', up: false },
-          { label: 'Avg Net Profit', val: 'KES 16,750', delta: '+22%', up: true },
-          { label: 'Savings Rate', val: '20%', delta: 'Consistent', up: true },
+          { label: 'Total Revenue', val: `KES ${totalIn.toLocaleString()}` },
+          { label: 'Avg Monthly Income', val: avgMonthly > 0 ? `KES ${avgMonthly.toLocaleString()}` : '—' },
+          { label: 'Total Savings', val: `KES ${totalSavings.toLocaleString()}` },
+          { label: 'Savings Rate', val: `${savingsRate}%` },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-xl p-4 border border-[#e2e8f0]">
             <p className="text-xs text-[#718096] mb-1">{s.label}</p>
             <p className="font-display font-bold text-lg text-[#1c1c1e]">{s.val}</p>
-            <p className={`text-xs font-semibold ${s.up ? 'text-green-600' : 'text-red-500'}`}>{s.delta} vs last period</p>
           </div>
         ))}
       </div>
 
-      {/* Bar chart */}
       <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
-        <h3 className="font-display font-bold text-[#1c1c1e] mb-1">Income vs Expenses</h3>
+        <h3 className="font-display font-bold text-[#1c1c1e] mb-1">Monthly Income</h3>
         <p className="text-xs text-[#718096] mb-4">Last 6 months (KES)</p>
-        <div className="flex items-end gap-2 h-36">
-          {months.map((m, i) => (
-            <div key={m} className="flex-1 flex flex-col items-center gap-0.5">
-              <div className="w-full flex gap-0.5 items-end" style={{ height: 120 }}>
-                <div
-                  className="flex-1 rounded-t bg-[#1a6b3c]"
-                  style={{ height: `${(income[i] / maxVal) * 100}%` }}
-                />
-                <div
-                  className="flex-1 rounded-t bg-[#e8a020]"
-                  style={{ height: `${(expenses[i] / maxVal) * 100}%` }}
-                />
+        {totalIn === 0 ? (
+          <p className="text-sm text-[#718096] text-center py-4">No income data yet.</p>
+        ) : (
+          <div className="flex items-end gap-2" style={{ height: 120 }}>
+            {months.map((m, i) => (
+              <div key={m.label} className="flex-1 flex flex-col items-center gap-0.5">
+                <div className="w-full flex items-end" style={{ height: 100 }}>
+                  <div className="w-full rounded-t bg-[#1a6b3c]" style={{ height: `${(incomeByMonth[i] / maxVal) * 100}%`, minHeight: incomeByMonth[i] > 0 ? 4 : 0 }} />
+                </div>
+                <span className="text-[10px] text-[#718096] font-mono-data">{m.label}</span>
               </div>
-              <span className="text-[10px] text-[#718096] font-mono-data">{m}</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-4 mt-3">
-          <span className="flex items-center gap-1 text-xs"><span className="w-2 h-2 rounded-full bg-[#1a6b3c] inline-block" /> Income</span>
-          <span className="flex items-center gap-1 text-xs"><span className="w-2 h-2 rounded-full bg-[#e8a020] inline-block" /> Expenses</span>
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Loan readiness */}
-      <div className="bg-green-50 border border-green-200 rounded-2xl p-5">
-        <p className="font-display font-bold text-[#1a6b3c] mb-1">Loan Readiness Report</p>
-        <p className="text-sm text-[#4a5568] mb-3">Your TENGABIZ records are ready to share with lenders. 6 months of verified transactions on file.</p>
+      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
+        <div className="flex items-center justify-between mb-3">
+          <p className="font-display font-bold text-[#1a6b3c]">Credit Score Breakdown</p>
+          <div className="text-right">
+            <p className="font-display text-2xl font-bold" style={{ color: cs.color }}>{cs.score}</p>
+            <p className="text-xs font-semibold" style={{ color: cs.color }}>{cs.label}</p>
+          </div>
+        </div>
         <div className="space-y-2">
-          {[
-            { label: 'Business age verified', ok: true },
-            { label: 'Consistent income history', ok: true },
-            { label: 'Savings discipline shown', ok: true },
-            { label: 'Low debt-to-income ratio', ok: true },
-            { label: 'Tax PIN registered', ok: false },
-          ].map(item => (
-            <div key={item.label} className="flex items-center gap-2">
-              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${item.ok ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-500'}`}>
-                {item.ok ? '✓' : '○'}
-              </span>
-              <span className={`text-sm ${item.ok ? 'text-[#1c1c1e]' : 'text-[#718096]'}`}>{item.label}</span>
+          {cs.factors.map(f => (
+            <div key={f.name}>
+              <div className="flex justify-between text-xs mb-0.5">
+                <span className="text-[#4a5568]">{f.name}</span>
+                <span className="font-mono-data font-semibold text-[#1c1c1e]">{f.pts}/{f.max}</span>
+              </div>
+              <div className="h-1.5 bg-[#e2e8f0] rounded-full">
+                <div className="h-full rounded-full bg-[#1a6b3c]" style={{ width: `${(f.pts / f.max) * 100}%` }} />
+              </div>
             </div>
           ))}
         </div>
-        <button className="mt-4 w-full py-2.5 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22]">
-          Download PDF Statement
-        </button>
+        <p className="text-xs text-[#4a5568] mt-4 bg-green-50 px-3 py-2 rounded-lg border border-green-100">
+          Estimated loan range: {cs.loanRange}
+        </p>
       </div>
     </div>
   )
@@ -960,8 +1015,8 @@ export default function App() {
             <>
               {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} />}
               {tab === 'transactions' && <Transactions transactions={transactions} />}
-              {tab === 'savings' && <Savings />}
-              {tab === 'reports' && <Reports />}
+              {tab === 'savings' && <Savings summary={summary} />}
+              {tab === 'reports' && <Reports transactions={transactions} summary={summary} />}
               {tab === 'settings' && <Settings user={user} onLogout={handleLogout} />}
             </>
           )}
