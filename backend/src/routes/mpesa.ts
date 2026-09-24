@@ -46,8 +46,10 @@ router.post('/register-c2b', async (_req, res) => {
     const result = await registerC2BUrls()
     res.json(result)
   } catch (err: any) {
-    const msg = err?.response?.data ?? err?.message ?? 'C2B registration failed'
-    res.status(502).json({ error: msg })
+    const darajaError = err?.response?.data
+    const msg = err?.message ?? 'C2B registration failed'
+    console.error('[register-c2b] Error:', JSON.stringify(darajaError ?? msg))
+    res.status(502).json({ error: msg, daraja: darajaError ?? null })
   }
 })
 
