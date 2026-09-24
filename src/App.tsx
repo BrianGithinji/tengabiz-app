@@ -1022,6 +1022,11 @@ export default function App() {
           )}
         </div>
 
+        {/* Footer */}
+        <footer className="hidden md:block border-t border-[#e2e8f0] px-6 py-3 text-center">
+          <p className="text-[11px] text-[#a0aec0]">Proudly built for the <span className="font-semibold text-[#718096]">MKU Access Student Clubs Business Innovation Bootcamp 2026</span></p>
+        </footer>
+
         {/* Mobile bottom nav */}
         <nav className="md:hidden sticky bottom-0 bg-white border-t border-[#e2e8f0] flex justify-around py-2 z-10">
           {NAV.map(n => (
