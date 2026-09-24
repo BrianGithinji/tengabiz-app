@@ -318,6 +318,64 @@ function AllocationRing({ pct, color, label, amount }: { pct: number; color: str
   )
 }
 
+function StkTestCard() {
+  const [phone, setPhone] = useState('254708374149')
+  const [amount, setAmount] = useState('1')
+  const [status, setStatus] = useState<{ type: 'success' | 'error' | 'loading'; msg: string } | null>(null)
+
+  async function handleTest(e: React.FormEvent) {
+    e.preventDefault()
+    setStatus({ type: 'loading', msg: 'Sending STK push...' })
+    try {
+      const res = await mpesa.stkPush({
+        phone,
+        amount: Number(amount),
+        accountRef: 'TEST',
+        description: 'TENGABIZ test payment',
+      })
+      if (res.ResponseCode === '0') {
+        setStatus({ type: 'success', msg: `✅ STK push sent! Check phone ${phone}. Request ID: ${res.CheckoutRequestID}` })
+      } else {
+        setStatus({ type: 'error', msg: `Daraja error: ${res.ResponseDescription}` })
+      }
+    } catch (err: any) {
+      setStatus({ type: 'error', msg: err.message })
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
+      <div className="mb-3">
+        <h3 className="font-display font-bold text-[#1c1c1e]">Test STK Push</h3>
+        <p className="text-xs text-[#718096]">Sandbox only — triggers M-PESA prompt on the test number</p>
+      </div>
+      <form onSubmit={handleTest} className="flex flex-col gap-3">
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="text-xs font-semibold text-[#4a5568] block mb-1">Phone</label>
+            <input value={phone} onChange={e => setPhone(e.target.value)}
+              className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1a6b3c] font-mono-data" />
+          </div>
+          <div className="w-24">
+            <label className="text-xs font-semibold text-[#4a5568] block mb-1">Amount</label>
+            <input type="number" min="1" value={amount} onChange={e => setAmount(e.target.value)}
+              className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+          </div>
+        </div>
+        <button type="submit" disabled={status?.type === 'loading'}
+          className="py-2.5 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22] disabled:opacity-60">
+          {status?.type === 'loading' ? 'Sending...' : 'Send STK Push'}
+        </button>
+      </form>
+      {status && status.type !== 'loading' && (
+        <p className={`mt-3 text-xs px-3 py-2 rounded-lg ${
+          status.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-700'
+        }`}>{status.msg}</p>
+      )}
+    </div>
+  )
+}
+
 function Dashboard({ transactions, summary }: { transactions: ApiTx[], summary: Summary }) {
   const totalBalance = summary.total_in
   const businessLock = summary.total_business_lock
@@ -427,6 +485,9 @@ function Dashboard({ transactions, summary }: { transactions: ApiTx[], summary: 
           </div>
         ))}
       </div>
+
+      {/* STK Test */}
+      <StkTestCard />
 
       {/* Credit Score */}
       {(() => {
