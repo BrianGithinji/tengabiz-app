@@ -62,6 +62,17 @@ try {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `)
+  // Migrations — add columns that may be missing from older table versions
+  await pool.query(`
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'in';
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS account_ref TEXT;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transaction_date TEXT;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS business_lock NUMERIC;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS savings_growth NUMERIC;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS flexible_funds NUMERIC;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS allocated INTEGER NOT NULL DEFAULT 1;
+  `).catch((e: any) => console.warn('[db] Migration warning:', e.message))
   console.log('[db] Tables ready')
 } catch (err: any) {
   console.error('[db] Failed to initialize tables:', err.message)
