@@ -18,11 +18,7 @@ app.use(cors({ origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:8443' })
 app.use(express.json())
 app.use(passport.initialize())
 
-// ── Static frontend ──────────────────────────────────────────────────────────
-const distPath = path.join(__dirname, '../../dist')
-app.use(express.static(distPath))
-
-// ── Routes ────────────────────────────────────────────────────────────────────
+// ── Routes (must be before static) ───────────────────────────────────────────
 app.use('/api/mpesa', mpesaRoutes)
 app.use('/api/payments', paymentsRoutes)
 app.use('/api/auth', authRoutes)
@@ -32,8 +28,12 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'TENGABIZ API', env: process.env.MPESA_ENV ?? 'sandbox' })
 })
 
-// Catch-all: serve React app for any non-API route
-app.get('*', (_req, res) => {
+// ── Static frontend ──────────────────────────────────────────────────────────
+const distPath = path.join(__dirname, '../../dist')
+app.use(express.static(distPath))
+
+// Catch-all: serve React app for non-API routes only
+app.get(/^(?!\/api).*$/, (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'))
 })
 
