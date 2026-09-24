@@ -331,7 +331,7 @@ function StkTestCard() {
         phone,
         amount: Number(amount),
         accountRef: 'TEST',
-        description: 'TENGABIZ test payment',
+        description: 'Test payment',
       })
       if (res.ResponseCode === '0') {
         setStatus({ type: 'success', msg: `✅ STK push sent! Check phone ${phone}. Request ID: ${res.CheckoutRequestID}` })

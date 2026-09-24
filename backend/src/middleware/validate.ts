@@ -5,7 +5,9 @@ export function validate(schema: ZodSchema) {
   return (req: Request, res: Response, next: NextFunction) => {
     const result = schema.safeParse(req.body)
     if (!result.success) {
-      res.status(400).json({ error: 'Validation failed', details: result.error.flatten() })
+      const details = result.error.flatten()
+      console.error('[validate] Failed:', JSON.stringify(details))
+      res.status(400).json({ error: 'Validation failed', details })
       return
     }
     req.body = result.data
@@ -20,7 +22,7 @@ export const stkPushSchema = z.object({
     .string()
     .regex(/^(07|01|2547|2541)\d{8}$/, 'Invalid Kenyan phone number'),
   amount: z.number().int().min(1).max(150000),
-  accountRef: z.string().min(1).max(12),
+  accountRef: z.string().min(1).max(20),
   description: z.string().min(1).max(13),
 })
 
