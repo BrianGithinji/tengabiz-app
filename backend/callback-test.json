@@ -1,0 +1,18 @@
+{
+  "Body": {
+    "stkCallback": {
+      "MerchantRequestID": "test-merchant-001",
+      "CheckoutRequestID": "ws_CO_test001",
+      "ResultCode": 0,
+      "ResultDesc": "The service request is processed successfully.",
+      "CallbackMetadata": {
+        "Item": [
+          { "Name": "Amount", "Value": 1450 },
+          { "Name": "MpesaReceiptNumber", "Value": "RBA12TEST01" },
+          { "Name": "TransactionDate", "Value": 20260923181500 },
+          { "Name": "PhoneNumber", "Value": 254708374149 }
+        ]
+      }
+    }
+  }
+}
