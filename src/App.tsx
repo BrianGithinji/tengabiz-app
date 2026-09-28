@@ -288,10 +288,10 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
       style={{ backgroundImage: `url(/tenga.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
       <div className="absolute inset-0 bg-black/50" />
       <div className="w-full max-w-sm relative z-10">
-        <div className="flex items-center gap-2 justify-center mb-8">
-          <img src={logo} alt="TENGABIZ" className="h-28 w-auto" />
+        <div className="flex items-center gap-2 justify-center mb-4">
+          <img src={logo} alt="TENGABIZ" className="h-20 w-auto" />
         </div>
-        <div className="bg-white rounded-2xl p-6 border border-[#e2e8f0] shadow-sm">
+        <div className="bg-white rounded-2xl p-6 border border-[#e2e8f0] shadow-sm overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
           <div className="flex gap-1 mb-6 bg-[#f7f7f7] rounded-xl p-1">
             {(['login', 'register'] as AuthScreen[]).map(s => (
               <button key={s} onClick={() => { setScreen(s); setError('') }}
