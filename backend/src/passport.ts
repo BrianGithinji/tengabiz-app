@@ -3,9 +3,10 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { randomUUID } from 'crypto'
 import pool from './db.js'
 
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 passport.use(new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID!,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+  clientID: process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   callbackURL: `${process.env.CALLBACK_BASE_URL}/api/auth/google/callback`,
 }, async (_accessToken, _refreshToken, profile, done) => {
   try {
@@ -33,5 +34,6 @@ passport.use(new GoogleStrategy({
     return done(err as Error)
   }
 }))
+}
 
 export default passport
