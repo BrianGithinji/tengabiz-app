@@ -119,7 +119,7 @@ export interface Summary {
 export const auth = {
   register: (body: {
     email: string; password: string; businessName: string
-    ownerName: string; phone: string; location?: string; description?: string
+    ownerName: string; phone: string; businessType?: string; location?: string; description?: string
     lat?: number; lng?: number
   }) => post<AuthResponse>('/api/auth/register', body),
 

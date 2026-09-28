@@ -253,7 +253,7 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
   const [loading, setLoading] = useState(false)
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
   const [regForm, setRegForm] = useState({
-    email: '', password: '', confirmPassword: '', businessName: '', ownerName: '', phone: '', description: '',
+    email: '', password: '', confirmPassword: '', businessName: '', ownerName: '', phone: '', description: '', businessType: '',
     location: '', lat: null as number | null, lng: null as number | null,
   })
 
@@ -274,7 +274,7 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
     try {
       const res = await auth.register({
         email: regForm.email, password: regForm.password, businessName: regForm.businessName,
-        ownerName: regForm.ownerName, phone: regForm.phone, description: regForm.description,
+        ownerName: regForm.ownerName, phone: regForm.phone, businessType: regForm.businessType, description: regForm.description,
         location: regForm.location, lat: regForm.lat ?? undefined, lng: regForm.lng ?? undefined,
       })
       localStorage.setItem('tengabiz_token', res.token)
@@ -339,6 +339,7 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
                 { label: 'Password (min 6 chars)', key: 'password', type: 'password', required: true },
                 { label: 'Confirm Password', key: 'confirmPassword', type: 'password', required: true },
                 { label: 'Phone Number', key: 'phone', type: 'tel', required: true },
+                { label: 'Business Type', key: 'businessType', type: 'text', required: false },
               ] as const).map(f => (
                 <div key={f.key}>
                   <label className="text-xs font-semibold text-[#4a5568] block mb-1">{f.label}</label>
@@ -865,7 +866,7 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
   const [photoUploading, setPhotoUploading] = useState(false)
   const [certUrl, setCertUrl] = useState<string | null>(null)
   const [certUploading, setCertUploading] = useState(false)
-  const [profileInfo, setProfileInfo] = useState({ phone: '', description: '', location: '', lat: null as number | null, lng: null as number | null })
+  const [profileInfo, setProfileInfo] = useState({ phone: '', businessType: '', description: '', location: '', lat: null as number | null, lng: null as number | null })
   const isNewUser = localStorage.getItem('tengabiz_new') === '1'
 
   useEffect(() => {
@@ -875,6 +876,7 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
         if (d.business_photo) setPhotoUrl(d.business_photo)
         if (d.reg_cert_url) setCertUrl(d.reg_cert_url)
         if (d.phone) setProfileInfo(p => ({ ...p, phone: d.phone }))
+        if (d.business_type) setProfileInfo(p => ({ ...p, businessType: d.business_type }))
         if (d.description) setProfileInfo(p => ({ ...p, description: d.description }))
         if (d.location) setProfileInfo(p => ({ ...p, location: d.location }))
         if (d.lat) setProfileInfo(p => ({ ...p, lat: d.lat, lng: d.lng }))
@@ -985,6 +987,7 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
         </div>
         {[
           { label: 'Business Owner', val: user.ownerName },
+          ...(profileInfo.businessType ? [{ label: 'Business Type', val: profileInfo.businessType }] : []),
           ...(profileInfo.phone ? [{ label: 'Phone', val: profileInfo.phone }] : []),
           ...(profileInfo.description ? [{ label: 'Description', val: profileInfo.description }] : []),
           ...(profileInfo.location ? [{ label: 'Location', val: profileInfo.location }] : []),

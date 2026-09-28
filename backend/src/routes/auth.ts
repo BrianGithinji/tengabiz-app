@@ -32,6 +32,7 @@ const registerSchema = z.object({
   businessName: z.string().min(1),
   ownerName: z.string().min(1),
   phone: z.string().min(1),
+  businessType: z.string().optional(),
   location: z.string().optional(),
   description: z.string().optional(),
   lat: z.number().optional(),
@@ -55,7 +56,7 @@ router.post('/register', async (req, res) => {
     return
   }
 
-  const { email, password, businessName, ownerName, phone, location, description, lat, lng } = result.data
+  const { email, password, businessName, ownerName, phone, businessType, location, description, lat, lng } = result.data
 
   const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email])
   if (existing.rows.length > 0) {
@@ -67,9 +68,9 @@ router.post('/register', async (req, res) => {
   const id = randomUUID()
 
   await pool.query(
-    `INSERT INTO users (id, email, password_hash, business_name, owner_name, phone, location, description, lat, lng)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-    [id, email, passwordHash, businessName, ownerName, phone, location ?? null, description ?? null, lat ?? null, lng ?? null]
+    `INSERT INTO users (id, email, password_hash, business_name, owner_name, phone, business_type, location, description, lat, lng)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [id, email, passwordHash, businessName, ownerName, phone, businessType ?? null, location ?? null, description ?? null, lat ?? null, lng ?? null]
   )
 
   res.status(201).json({ token: signToken(id), userId: id, businessName, ownerName })
@@ -109,7 +110,7 @@ router.post('/login', async (req, res) => {
 // GET /api/auth/me
 router.get('/me', requireAuth, async (req: AuthRequest, res) => {
   const { rows } = await pool.query(
-    'SELECT id, email, business_name, owner_name, phone, location, lat, lng, description, business_photo, reg_cert_url, created_at FROM users WHERE id = $1',
+    'SELECT id, email, business_name, owner_name, phone, business_type, location, lat, lng, description, business_photo, reg_cert_url, created_at FROM users WHERE id = $1',
     [req.userId]
   )
   if (rows.length === 0) { res.status(404).json({ error: 'User not found' }); return }
