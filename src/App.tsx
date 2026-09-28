@@ -47,7 +47,7 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
         </div>
         <div className="bg-white rounded-2xl p-6 border border-[#e2e8f0] shadow-sm">
           <div className="mb-5">
-            <p className="font-display text-lg font-bold text-[#1c1c1e]">Welcome, {user.ownerName.split(' ')[0]}! 👋</p>
+            <p className="font-display text-lg font-bold text-[#1c1c1e]">Welcome, {user.ownerName.split(' ')[0]}!</p>
             <p className="text-sm text-[#718096] mt-1">Set up your business to start tracking payments.</p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -438,7 +438,7 @@ function Dashboard({ transactions, summary, ownerName }: { transactions: ApiTx[]
           background: 'radial-gradient(circle, white 0%, transparent 70%)',
           transform: 'translate(30%, -30%)'
         }} />
-        <p className="text-green-100 text-sm font-medium mb-1">{getGreeting()}, {ownerName}! 👋</p>
+        <p className="text-green-100 text-sm font-medium mb-1">{getGreeting()}, {ownerName}!</p>
         <p className="text-green-100 text-sm font-medium mb-1">Total Business Balance</p>
         <p className="font-display text-4xl font-bold mb-1 tracking-tight">
           KES {totalBalance.toLocaleString()}
@@ -951,12 +951,11 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
 
       {isNewUser && (
         <div className="bg-[#1a6b3c] text-white rounded-2xl p-4 flex items-start gap-3">
-          <span className="text-2xl">🎉</span>
           <div className="flex-1">
             <p className="font-display font-bold text-sm">Welcome, {user.ownerName.split(' ')[0]}! Complete your profile</p>
             <p className="text-green-100 text-xs mt-0.5 mb-3">Add a business photo and payment channel to get started.</p>
             <label className="cursor-pointer inline-flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-all">
-              {photoUploading ? 'Uploading...' : photoUrl ? '✓ Photo uploaded — change it' : '📷 Upload business photo'}
+              {photoUploading ? 'Uploading...' : photoUrl ? 'Photo uploaded — change it' : 'Upload business photo'}
               <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} disabled={photoUploading} />
             </label>
           </div>
@@ -969,7 +968,7 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
           {photoUrl
             ? <img src={photoUrl} alt="Business" className="w-16 h-16 rounded-xl object-cover shrink-0" />
             : <label className="cursor-pointer w-16 h-16 rounded-xl bg-[#f7f7f7] border-2 border-dashed border-[#e2e8f0] flex flex-col items-center justify-center text-[#718096] hover:border-[#1a6b3c] transition-all shrink-0">
-                <span className="text-xl">{photoUploading ? '⏳' : '📷'}</span>
+                <span className="text-xl">{photoUploading ? '...' : '+'}</span>
                 <span className="text-[9px] font-semibold mt-0.5">{photoUploading ? 'Uploading' : 'Add photo'}</span>
                 <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} disabled={photoUploading} />
               </label>
@@ -1011,7 +1010,7 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
           <label className={`mt-2 cursor-pointer flex items-center gap-2 border-2 border-dashed rounded-xl px-4 py-3 transition-all ${
             certUrl ? 'border-green-300 bg-green-50' : 'border-[#e2e8f0] hover:border-[#1a6b3c]'
           }`}>
-            <span className="text-lg">{certUploading ? '⏳' : certUrl ? '📄' : '📎'}</span>
+            <span className="text-lg">{certUploading ? '...' : certUrl ? 'PDF' : 'Upload'}</span>
             <span className="text-xs font-semibold text-[#4a5568]">
               {certUploading ? 'Uploading...' : certUrl ? 'Certificate uploaded — click to replace' : 'Upload registration certificate (PDF or image)'}
             </span>
@@ -1294,7 +1293,7 @@ export default function App() {
             <img src={logo} alt="TENGABIZ" className="h-12 w-auto" />
           </div>
           <div className="hidden md:block">
-            <p className="font-display font-bold text-[#1c1c1e]">{getGreeting()}, {user.ownerName}! 👋</p>
+            <p className="font-display font-bold text-[#1c1c1e]">{getGreeting()}, {user.ownerName}</p>
             <p className="text-xs text-[#718096]">{user.businessName}</p>
           </div>
           <div className="flex items-center gap-2">
