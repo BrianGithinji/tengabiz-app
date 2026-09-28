@@ -339,7 +339,6 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
                 { label: 'Password (min 6 chars)', key: 'password', type: 'password', required: true },
                 { label: 'Confirm Password', key: 'confirmPassword', type: 'password', required: true },
                 { label: 'Phone Number', key: 'phone', type: 'tel', required: true },
-                { label: 'Business Type', key: 'businessType', type: 'text', required: false },
               ] as const).map(f => (
                 <div key={f.key}>
                   <label className="text-xs font-semibold text-[#4a5568] block mb-1">{f.label}</label>
@@ -349,6 +348,19 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
                     className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
                 </div>
               ))}
+              <div>
+                <label className="text-xs font-semibold text-[#4a5568] block mb-1">Business Type</label>
+                <select value={regForm.businessType}
+                  onChange={e => setRegForm(r => ({ ...r, businessType: e.target.value }))}
+                  className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c] bg-white">
+                  <option value="">Select business type...</option>
+                  {[
+                    'Grocery shop', 'Cosmetics & Beauty', 'Clothing & Apparel', 'Electronics & Phones',
+                    'Hardware & Building', 'Pharmacy & Health', 'Food & Restaurant', 'Salon & Barbershop',
+                    'Stationery & Books', 'Livestock & Farming', 'Transport & Logistics', 'Other',
+                  ].map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
               <div>
                 <label className="text-xs font-semibold text-[#4a5568] block mb-1">Business Location</label>
                 <LocationPicker
