@@ -27,11 +27,13 @@ const certUpload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 }, fil
 const router = Router()
 
 const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  phone: z.string().min(9),
+  email: z.string().email().optional().or(z.literal('')),
+  pin: z.string().length(4).regex(/^\d+$/),
   businessName: z.string().min(1),
   ownerName: z.string().min(1),
-  phone: z.string().min(1),
   businessType: z.string().optional(),
   location: z.string().optional(),
   description: z.string().optional(),
@@ -40,13 +42,64 @@ const registerSchema = z.object({
 })
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  phone: z.string().min(9),
+  pin: z.string().min(4),
 })
 
 function signToken(userId: string) {
   return jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: '30d' })
 }
+
+// POST /api/auth/send-otp
+router.post('/send-otp', async (req, res) => {
+  const { phone } = req.body
+  if (!phone) { res.status(400).json({ error: 'Phone required' }); return }
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString()
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 min
+
+  await pool.query(
+    `INSERT INTO otp_sessions (phone, otp, expires_at) VALUES ($1, $2, $3)
+     ON CONFLICT (phone) DO UPDATE SET otp = $2, expires_at = $3, verified = FALSE`,
+    [phone, otp, expiresAt]
+  )
+
+  // SMS gateway — use Africa's Talking or any provider via env
+  const smsUrl = process.env.SMS_API_URL
+  const smsKey = process.env.SMS_API_KEY
+  if (smsUrl && smsKey) {
+    try {
+      await fetch(smsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apiKey': smsKey },
+        body: JSON.stringify({ to: phone, message: `Your TENGABIZ verification code is: ${otp}. Valid for 10 minutes.` }),
+      })
+    } catch (e) { console.warn('[sms] Failed to send OTP:', e) }
+  } else {
+    // Dev fallback — log OTP to console
+    console.log(`[otp] ${phone} → ${otp}`)
+  }
+
+  res.json({ success: true })
+})
+
+// POST /api/auth/verify-otp
+router.post('/verify-otp', async (req, res) => {
+  const { phone, otp } = req.body
+  if (!phone || !otp) { res.status(400).json({ error: 'Phone and OTP required' }); return }
+
+  const { rows } = await pool.query(
+    'SELECT * FROM otp_sessions WHERE phone = $1', [phone]
+  )
+  if (rows.length === 0) { res.status(400).json({ error: 'No OTP sent to this number' }); return }
+
+  const session = rows[0]
+  if (new Date() > new Date(session.expires_at)) { res.status(400).json({ error: 'OTP expired' }); return }
+  if (session.otp !== otp) { res.status(400).json({ error: 'Invalid OTP' }); return }
+
+  await pool.query('UPDATE otp_sessions SET verified = TRUE WHERE phone = $1', [phone])
+  res.json({ success: true })
+})
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
@@ -56,48 +109,48 @@ router.post('/register', async (req, res) => {
     return
   }
 
-  const { email, password, businessName, ownerName, phone, businessType, location, description, lat, lng } = result.data
+  const { firstName, lastName, phone, email, pin, businessName, ownerName, businessType, location, description, lat, lng } = result.data
 
-  const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email])
-  if (existing.rows.length > 0) {
-    res.status(409).json({ error: 'Email already registered' })
+  // Verify OTP was completed
+  const { rows: otpRows } = await pool.query(
+    'SELECT verified FROM otp_sessions WHERE phone = $1', [phone]
+  )
+  if (otpRows.length === 0 || !otpRows[0].verified) {
+    res.status(403).json({ error: 'Phone not verified. Please complete OTP verification.' })
     return
   }
 
-  const passwordHash = await bcrypt.hash(password, 10)
+  const existing = await pool.query('SELECT id FROM users WHERE phone = $1', [phone])
+  if (existing.rows.length > 0) { res.status(409).json({ error: 'Phone number already registered' }); return }
+
+  const pinHash = await bcrypt.hash(pin, 10)
   const id = randomUUID()
+  const fullName = `${firstName} ${lastName}`.trim()
 
   await pool.query(
-    `INSERT INTO users (id, email, password_hash, business_name, owner_name, phone, business_type, location, description, lat, lng)
+    `INSERT INTO users (id, email, pin_hash, business_name, owner_name, phone, business_type, location, description, lat, lng)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-    [id, email, passwordHash, businessName, ownerName, phone, businessType ?? null, location ?? null, description ?? null, lat ?? null, lng ?? null]
+    [id, email || null, pinHash, businessName, fullName, phone, businessType ?? null, location ?? null, description ?? null, lat ?? null, lng ?? null]
   )
 
-  res.status(201).json({ token: signToken(id), userId: id, businessName, ownerName })
+  await pool.query('DELETE FROM otp_sessions WHERE phone = $1', [phone])
+
+  res.status(201).json({ token: signToken(id), userId: id, businessName, ownerName: fullName })
 })
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const result = loginSchema.safeParse(req.body)
-  if (!result.success) {
-    res.status(400).json({ error: 'Validation failed' })
-    return
-  }
+  if (!result.success) { res.status(400).json({ error: 'Validation failed' }); return }
 
-  const { email, password } = result.data
-  const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email])
+  const { phone, pin } = result.data
+  const { rows } = await pool.query('SELECT * FROM users WHERE phone = $1', [phone])
 
-  if (rows.length === 0) {
-    res.status(401).json({ error: 'Invalid email or password' })
-    return
-  }
+  if (rows.length === 0) { res.status(401).json({ error: 'Invalid phone number or PIN' }); return }
 
   const user = rows[0]
-  const valid = await bcrypt.compare(password, user.password_hash)
-  if (!valid) {
-    res.status(401).json({ error: 'Invalid email or password' })
-    return
-  }
+  const valid = await bcrypt.compare(pin, user.pin_hash)
+  if (!valid) { res.status(401).json({ error: 'Invalid phone number or PIN' }); return }
 
   res.json({
     token: signToken(user.id),

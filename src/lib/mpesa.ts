@@ -117,14 +117,20 @@ export interface Summary {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export const auth = {
+  sendOtp: (phone: string) =>
+    post<{ success: boolean }>('/api/auth/send-otp', { phone }),
+
+  verifyOtp: (phone: string, otp: string) =>
+    post<{ success: boolean }>('/api/auth/verify-otp', { phone, otp }),
+
   register: (body: {
-    email: string; password: string; businessName: string
-    ownerName: string; phone: string; businessType?: string; location?: string; description?: string
-    lat?: number; lng?: number
+    firstName: string; lastName: string; phone: string; email?: string; pin: string
+    businessName: string; ownerName: string; businessType?: string
+    location?: string; description?: string; lat?: number; lng?: number
   }) => post<AuthResponse>('/api/auth/register', body),
 
-  login: (email: string, password: string) =>
-    post<AuthResponse>('/api/auth/login', { email, password }),
+  login: (phone: string, pin: string) =>
+    post<AuthResponse>('/api/auth/login', { phone, pin }),
 
   me: () => get<User>('/api/auth/me', true),
 }

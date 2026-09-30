@@ -15,13 +15,20 @@ try {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
-      email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
+      email TEXT,
+      pin_hash TEXT NOT NULL DEFAULT '',
       business_name TEXT NOT NULL,
       owner_name TEXT NOT NULL,
-      phone TEXT,
+      phone TEXT UNIQUE,
       location TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS otp_sessions (
+      phone TEXT PRIMARY KEY,
+      otp TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      verified BOOLEAN NOT NULL DEFAULT FALSE
     );
 
     CREATE TABLE IF NOT EXISTS channels (
@@ -70,6 +77,7 @@ try {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS reg_cert_url TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS business_type TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_hash TEXT;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'in';
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS account_ref TEXT;
