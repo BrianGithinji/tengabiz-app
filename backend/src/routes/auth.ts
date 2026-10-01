@@ -201,11 +201,19 @@ router.get('/google', passport.authenticate('google', { scope: ['profile', 'emai
 
 // GET /api/auth/google/callback — Google redirects here after login
 router.get('/google/callback',
-  passport.authenticate('google', { session: false, failureRedirect: '/?error=google_failed' }),
-  (req, res) => {
-    const user = req.user as any
-    const token = signToken(user.id)
-    res.redirect(`/?token=${token}&businessName=${encodeURIComponent(user.business_name)}&ownerName=${encodeURIComponent(user.owner_name)}&isNew=${user.is_new ? '1' : '0'}`)
+  (req, res, next) => {
+    passport.authenticate('google', { session: false }, (err: any, user: any) => {
+      if (err) {
+        console.error('[google/callback] Auth error:', err.message)
+        return res.redirect(`/?error=${encodeURIComponent(err.message)}`)
+      }
+      if (!user) {
+        console.error('[google/callback] No user returned')
+        return res.redirect('/?error=google_failed')
+      }
+      const token = signToken(user.id)
+      res.redirect(`/?token=${token}&businessName=${encodeURIComponent(user.business_name)}&ownerName=${encodeURIComponent(user.owner_name)}&isNew=${user.is_new ? '1' : '0'}`)
+    })(req, res, next)
   }
 )
 
