@@ -8,18 +8,37 @@ export async function registerC2BUrls() {
   const token = await getAccessToken()
   const base = process.env.CALLBACK_BASE_URL!
 
-  const { data } = await axios.post(
-    `${darajaBase()}/mpesa/c2b/v1/registerurl`,
-    {
-      ShortCode: process.env.MPESA_SHORTCODE,
-      ResponseType: 'Completed', // "Completed" | "Cancelled"
-      ConfirmationURL: `${base}/api/payments/c2b-confirmation`,
-      ValidationURL: `${base}/api/payments/c2b-validation`,
-    },
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
+  const url = `${darajaBase()}/mpesa/c2b/v1/registerurl`
+  const payload = {
+    ShortCode: process.env.MPESA_SHORTCODE,
+    ResponseType: 'Completed',
+    ConfirmationURL: `${base}/api/payments/c2b-confirmation`,
+    ValidationURL: `${base}/api/payments/c2b-validation`,
+  }
 
-  return data
+  console.log('[C2B] URL:', url)
+  console.log('[C2B] MPESA_ENV:', process.env.MPESA_ENV)
+  console.log('[C2B] ShortCode:', process.env.MPESA_SHORTCODE)
+  console.log('[C2B] Callback base:', base)
+  console.log('[C2B] ConfirmationURL:', payload.ConfirmationURL)
+  console.log('[C2B] ValidationURL:', payload.ValidationURL)
+  console.log('[C2B] Token received:', Boolean(token))
+  console.log('[C2B] Token length:', token?.length)
+
+  try {
+    const response = await axios.post(url, payload, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      timeout: 30000,
+    })
+    console.log('[C2B] Daraja status:', response.status)
+    console.log('[C2B] Daraja response:', response.data)
+    return response.data
+  } catch (err: any) {
+    console.error('[C2B] Daraja status:', err?.response?.status)
+    console.error('[C2B] Daraja response:', err?.response?.data)
+    console.error('[C2B] Daraja headers:', err?.response?.headers)
+    throw err
+  }
 }
 
 // ── Transaction Status Query ──────────────────────────────────────────────────
