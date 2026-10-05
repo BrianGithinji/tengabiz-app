@@ -539,34 +539,6 @@ function Badge({ channel }: { channel: string }) {
   )
 }
 
-function AllocationRing({ pct, color, label, amount }: { pct: number; color: string; label: string; amount: string }) {
-  const r = 30
-  const circ = 2 * Math.PI * r
-  const dash = (pct / 100) * circ
-  // Strip "KES " prefix for inside the ring to save space
-  const ringValue = amount.replace('KES ', '')
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="relative w-24 h-24">
-        <svg viewBox="0 0 72 72" className="w-full h-full -rotate-90">
-          <circle cx="36" cy="36" r={r} fill="none" stroke="#e2e8f0" strokeWidth="6" />
-          <circle
-            cx="36" cy="36" r={r} fill="none" stroke={color} strokeWidth="6"
-            strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center px-1">
-          <span className="text-[9px] font-semibold text-[#718096] leading-none mb-0.5">KES</span>
-          <span className="font-mono-data text-[11px] font-bold text-[#1c1c1e] leading-tight text-center">{ringValue}</span>
-        </div>
-      </div>
-      <p className="font-display text-xs font-semibold text-[#4a5568] text-center leading-tight">
-        {label} <span className="text-[10px] font-normal text-[#94a3b8]">({pct}%)</span>
-      </p>
-    </div>
-  )
-}
-
 function fmt2(n: number) {
   return Number(n).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -574,14 +546,15 @@ function fmt2(n: number) {
 function Dashboard({ transactions, summary, ownerName, userChannels }: {
   transactions: ApiTx[], summary: Summary, ownerName: string, userChannels: Channel[]
 }) {
-  const totalBalance = summary.total_in
-  const businessLock = summary.total_business_lock
-  const savings = summary.total_savings
-  const flexible = summary.total_flexible
-  const totalIncome = transactions.filter(t => t.type === 'in').reduce((s, t) => s + t.amount, 0)
-  const totalExpenses = 0
-  const net = totalIncome - totalExpenses
+  const totalBalance = Number(summary.total_in) || 0
+  const businessLock = Number(summary.total_business_lock) || 0
+  const savings = Number(summary.total_savings) || 0
+  const flexible = Number(summary.total_flexible) || 0
   const [moneyView, setMoneyView] = useState<'business' | 'personal'>('business')
+  const initials = ownerName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+  const firstName = ownerName.split(' ')[0]
+  const hasPochi = userChannels.some(c => c.type === 'pochi')
+  const hasTillOrPaybill = userChannels.some(c => c.type === 'till' || c.type === 'paybill')
 
   function formatDate(raw: string) {
     if (!raw) return ''
@@ -590,146 +563,127 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
     return new Date(raw).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' })
   }
 
-  // Channel connection status
-  const hasPochi = userChannels.some(c => c.type === 'pochi')
-  const hasTillOrPaybill = userChannels.some(c => c.type === 'till' || c.type === 'paybill')
-
   return (
     <div className="space-y-4">
-      {/* Balance Hero */}
-      <div
-        className="rounded-2xl p-6 text-white relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, #1a6b3c 0%, #2d9558 60%, #e8a020 140%)' }}
-      >
-        <div className="absolute top-0 right-0 w-48 h-48 opacity-10" style={{
-          background: 'radial-gradient(circle, white 0%, transparent 70%)',
-          transform: 'translate(30%, -30%)'
-        }} />
 
-        {/* App branding block */}
-        <div className="mb-3">
-          <p className="font-display text-lg font-bold text-white tracking-wide">TengaBiz</p>
-          <p className="text-white/60 text-xs italic">Tenganisha pesa ya biashara na pesa yako binafsi</p>
+      {/* ── Top Identity Header ── */}
+      <div className="rounded-3xl overflow-hidden" style={{ background: 'linear-gradient(135deg, #1a6b3c 0%, #2d9558 65%, #e8a020 140%)' }}>
+        {/* Branding row */}
+        <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <img src={logo} alt="" className="h-8 w-auto" />
+            <div>
+              <p className="font-display text-base font-bold text-white leading-tight">TENGABIZ</p>
+              <p className="text-white/60 text-[10px] italic leading-tight">Tenganisha pesa ya biashara na pesa yako binafsi</p>
+            </div>
+          </div>
+          <NotificationBellInline transactions={transactions} />
         </div>
 
-        {/* Merchant welcome block */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-[#e8a020] border-2 border-white/30 flex items-center justify-center text-[#0f3d22] font-bold text-sm shrink-0 shadow-sm">
-            {ownerName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+        {/* Profile row */}
+        <div className="px-5 pb-5 flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center shrink-0">
+            <span className="text-white font-bold text-base">{initials}</span>
           </div>
           <div>
-            <p className="text-white text-sm font-semibold leading-tight">{getGreeting(ownerName.split(' ')[0])}</p>
-            <p className="text-green-200 text-xs leading-tight">{ownerName}</p>
-          </div>
-        </div>
-
-        <p className="text-green-100 text-xs font-medium mb-1">Total Business Balance</p>
-        <p className="font-display text-4xl font-bold mb-1 tracking-tight">
-          KES {fmt2(totalBalance)}
-        </p>
-        <p className="text-green-200 text-xs font-mono-data">Updated: {transactions[0] ? formatDate(transactions[0].transaction_date) : 'No transactions yet'}</p>
-
-        <div className="mt-5 flex gap-3">
-          <div className="bg-white/15 rounded-xl px-3 py-2 flex-1 text-center">
-            <p className="text-green-100 text-xs">Income</p>
-            <p className="font-display font-bold text-base">{totalIncome > 0 ? '+' : ''}{totalIncome.toLocaleString()}</p>
-          </div>
-          <div className="bg-white/15 rounded-xl px-3 py-2 flex-1 text-center">
-            <p className="text-green-100 text-xs">Expenses</p>
-            <p className="font-display font-bold text-base">{totalExpenses.toLocaleString()}</p>
-          </div>
-          <div className="bg-white/15 rounded-xl px-3 py-2 flex-1 text-center">
-            <p className="text-green-100 text-xs">Net</p>
-            <p className="font-display font-bold text-base">{net > 0 ? '+' : ''}{net.toLocaleString()}</p>
+            <p className="text-white font-bold text-sm leading-tight">Jambo, {firstName}!</p>
+            <p className="text-green-200 text-xs leading-tight">{ownerName} &bull; Business Account</p>
           </div>
         </div>
       </div>
 
-      {/* Business / Personal toggle */}
+      {/* ── Business Balance Card ── */}
+      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0] shadow-sm">
+        <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest mb-1">Business Balance</p>
+        <p className="font-display text-4xl font-extrabold text-[#1c1c1e] tracking-tight mb-4">
+          KES {fmt2(totalBalance)}
+        </p>
+
+        {/* 3-column rectangular buckets */}
+        <div className="grid grid-cols-3 gap-2">
+          {/* Available (Flexible) */}
+          <div className="bg-[#f0faf4] rounded-xl p-3">
+            <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
+              Available <span className="text-[#94a3b8]">(20%)</span>
+            </p>
+            <p className="font-mono-data font-bold text-sm text-[#1a6b3c] mt-1">KES {fmt2(flexible)}</p>
+          </div>
+          {/* Business Lock */}
+          <div className="bg-[#fffbeb] rounded-xl p-3">
+            <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
+              🔒 Business Lock <span className="text-[#94a3b8]">(60%)</span>
+            </p>
+            <p className="font-mono-data font-bold text-sm text-[#e8a020] mt-1">KES {fmt2(businessLock)}</p>
+          </div>
+          {/* Savings */}
+          <div className="bg-[#eff6ff] rounded-xl p-3">
+            <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
+              🎯 Savings <span className="text-[#94a3b8]">(20%)</span>
+            </p>
+            <p className="font-mono-data font-bold text-sm text-[#2563eb] mt-1">KES {fmt2(savings)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Business / Personal toggle ── */}
       <div className="bg-[#f0f4f0] rounded-2xl p-1 flex gap-1">
         {(['business', 'personal'] as const).map(v => (
           <button key={v} onClick={() => setMoneyView(v)}
             className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${
-              moneyView === v
-                ? 'bg-[#1a6b3c] text-white shadow-sm'
-                : 'text-[#4a5568] hover:text-[#1a6b3c]'
+              moneyView === v ? 'bg-[#1a6b3c] text-white shadow-sm' : 'text-[#4a5568] hover:text-[#1a6b3c]'
             }`}>
             {v === 'business' ? 'Business Money' : 'Personal Money'}
           </button>
         ))}
       </div>
 
-      {/* Connected channels strip */}
+      {/* ── Connected channels strip ── */}
       <div className="flex gap-2 overflow-x-auto pb-0.5">
         <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 border ${
           hasPochi ? 'bg-[#0f3d22] text-white border-[#0f3d22]' : 'bg-white text-[#94a3b8] border-[#e2e8f0]'
         }`}>
-          <span>{hasPochi ? '✓' : '○'}</span> Pochi la Biashara
+          {hasPochi ? '✓' : '○'} Pochi la Biashara
         </div>
         <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 border ${
           hasTillOrPaybill ? 'bg-[#0f3d22] text-white border-[#0f3d22]' : 'bg-white text-[#94a3b8] border-[#e2e8f0]'
         }`}>
-          <span>{hasTillOrPaybill ? '⚡' : '○'}</span> M-PESA Daraja 3.0
+          {hasTillOrPaybill ? '⚡' : '○'} M-PESA Daraja 3.0
         </div>
       </div>
 
-      {/* 60/20/20 Allocation */}
-      <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0]">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="font-display text-base font-bold text-[#1c1c1e]">TENGA Allocation</h3>
-            <p className="text-xs text-[#718096]">Your money, organized automatically</p>
-          </div>
-          <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full font-semibold">60 · 20 · 20</span>
-        </div>
-        <div className="flex justify-around">
-          <AllocationRing pct={60} color="#1a6b3c" label="Business Lock" amount={`KES ${fmt2(businessLock)}`} />
-          <AllocationRing pct={20} color="#e8a020" label="Savings & Growth" amount={`KES ${fmt2(savings)}`} />
-          <AllocationRing pct={20} color="#2563eb" label="Flexible Funds" amount={`KES ${fmt2(flexible)}`} />
-        </div>
-      </div>
-
-      {/* Recent Transactions */}
-      <div className="bg-white rounded-2xl border border-[#e2e8f0] overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#e2e8f0] flex items-center justify-between">
-          <div>
-            <h3 className="font-display font-bold text-[#1c1c1e]">Recent Activity</h3>
-            <p className="text-xs text-[#718096]">Latest incoming payments</p>
-          </div>
-          <span className="text-xs text-[#2d9558] font-semibold cursor-pointer">See all →</span>
-        </div>
-        {transactions.length === 0 ? (
-          <div className="px-5 py-8 flex flex-col items-center gap-2">
-            <div className="w-10 h-10 rounded-full bg-[#f0f4f0] flex items-center justify-center text-[#1a6b3c] text-lg">↓</div>
-            <p className="text-sm font-semibold text-[#4a5568]">No transactions yet</p>
-            <p className="text-xs text-[#718096] text-center">Payments received via M-PESA will appear here automatically.</p>
-          </div>
-        ) : transactions.slice(0, 5).map((tx) => (
-          <div key={tx.id} className="px-5 py-3 flex items-center gap-3 border-b border-[#f7f7f7] last:border-0 hover:bg-[#fafafa] transition-colors">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${
-              tx.type === 'in' ? 'bg-green-50 text-[#1a6b3c]' : 'bg-red-50 text-[#e53e3e]'
-            }`}>
-              {tx.type === 'in' ? '↓' : '↑'}
+      {/* ── Transactions feed ── */}
+      <div>
+        <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest mb-2 px-1">Transactions</p>
+        <div className="bg-white rounded-2xl border border-[#e2e8f0] overflow-hidden">
+          {transactions.length === 0 ? (
+            <div className="px-5 py-8 flex flex-col items-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-[#f0f4f0] flex items-center justify-center text-[#1a6b3c] text-lg">↓</div>
+              <p className="text-sm font-semibold text-[#4a5568]">No transactions yet</p>
+              <p className="text-xs text-[#718096] text-center">Payments received via M-PESA will appear here automatically.</p>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-[#1c1c1e] truncate">{tx.mpesa_receipt ?? tx.account_ref ?? 'M-PESA Payment'}</p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] text-[#718096]">{formatDate(tx.transaction_date)}</span>
-                <Badge channel={tx.channel} />
+          ) : transactions.slice(0, 8).map((tx) => (
+            <div key={tx.id} className="px-4 py-3 flex items-center gap-3 border-b border-[#f7f7f7] last:border-0 hover:bg-[#fafafa] transition-colors">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${
+                tx.type === 'in' ? 'bg-green-50 text-[#1a6b3c]' : 'bg-red-50 text-[#e53e3e]'
+              }`}>{tx.type === 'in' ? '↓' : '↑'}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-[#1c1c1e] truncate">{tx.mpesa_receipt ?? tx.account_ref ?? 'M-PESA Payment'}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[11px] text-[#718096]">{formatDate(tx.transaction_date)}</span>
+                  <Badge channel={tx.channel} />
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <p className={`font-mono-data font-bold text-sm ${
+                  tx.type === 'in' ? 'text-[#1a6b3c]' : 'text-[#e53e3e]'
+                }`}>
+                  {tx.type === 'in' ? '+' : '-'}KES {fmt2(Number(tx.amount))}
+                </p>
+                {!tx.allocated && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold">Pending</span>}
               </div>
             </div>
-            <div className="text-right shrink-0">
-              <p className={`font-mono-data font-bold text-sm ${
-                tx.type === 'in' ? 'text-[#1a6b3c]' : 'text-[#e53e3e]'
-              }`}>
-                {tx.type === 'in' ? '+' : '-'}KES {Number(tx.amount).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-              {!tx.allocated && (
-                <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold">Pending</span>
-              )}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -1310,6 +1264,65 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
   )
 }
 
+// ─── Inline notification bell (used inside Dashboard header) ────────────────
+
+function NotificationBellInline({ transactions }: { transactions: ApiTx[] }) {
+  const [open, setOpen] = useState(false)
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('tengabiz_dismissed') ?? '[]')) } catch { return new Set() }
+  })
+  const notifications = transactions
+    .filter(tx => tx.type === 'in' && !dismissed.has(tx.id)).slice(0, 10)
+    .map(tx => ({
+      id: tx.id,
+      title: `+KES ${Number(tx.amount).toLocaleString()} received`,
+      body: tx.mpesa_receipt ? `Receipt: ${tx.mpesa_receipt}` : 'M-PESA payment',
+      unallocated: !tx.allocated,
+    }))
+  function dismiss(id: string) {
+    const next = new Set(dismissed).add(id)
+    setDismissed(next)
+    localStorage.setItem('tengabiz_dismissed', JSON.stringify([...next]))
+  }
+  if (notifications.length === 0) return null
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(o => !o)}
+        className="relative w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#e8a020] text-[#0f3d22] text-[9px] font-bold flex items-center justify-center">
+          {notifications.length > 9 ? '9+' : notifications.length}
+        </span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-10 w-72 bg-white rounded-2xl shadow-xl border border-[#e2e8f0] z-30 overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#e2e8f0] flex items-center justify-between">
+              <p className="font-display font-bold text-sm text-[#1c1c1e]">Notifications</p>
+              <button onClick={() => setOpen(false)} className="text-xs text-[#718096] font-semibold">Close</button>
+            </div>
+            <div className="max-h-64 overflow-y-auto divide-y divide-[#f0f0f0]">
+              {notifications.map(n => (
+                <div key={n.id} className="px-4 py-3 flex items-start gap-3 hover:bg-[#f7f7f7]">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-[#1c1c1e]">{n.title}</p>
+                    <p className="text-xs text-[#718096] truncate">{n.body}</p>
+                  </div>
+                  <button onClick={() => dismiss(n.id)} className="text-[#c0c0c0] hover:text-[#718096] text-lg leading-none shrink-0">×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Notification Bell ───────────────────────────────────────────────────────
 
 function NotificationBell({ transactions }: { transactions: ApiTx[] }) {
@@ -1490,64 +1503,11 @@ export default function App() {
   if (screen === 'setup') return <SetupChannel user={user} onDone={handleSetupDone} />
 
   return (
-    <div className="min-h-screen bg-[#fdf8f0] flex">
-      {/* Sidebar */}
-      <aside className="hidden md:flex flex-col w-56 bg-[#0f3d22] text-white shrink-0 py-6 px-4 sticky top-0 h-screen">
-        {/* Logo */}
-        <div className="mb-8 px-2">
-          <img src={logo} alt="TENGABIZ" className="h-16 w-auto" />
-          <p className="text-green-400 text-[10px] mt-1 font-mono-data">Smart Business Finance</p>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex flex-col gap-1 flex-1">
-          {NAV.map(n => (
-            <button
-              key={n.id}
-              onClick={() => setTab(n.id)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-left transition-all ${
-                tab === n.id
-                  ? 'bg-[#e8a020] text-[#0f3d22]'
-                  : 'text-green-200 hover:bg-white/10'
-              }`}
-            >
-              <span className="text-base w-5 text-center">{n.icon}</span>
-              {n.label}
-            </button>
-          ))}
-        </nav>
-
-        {/* Bottom profile */}
-        <div className="mt-4 px-2 pt-4 border-t border-white/10">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#e8a020] flex items-center justify-center text-[#0f3d22] font-bold text-sm">{user.ownerName[0]}</div>
-            <div>
-              <p className="text-xs font-semibold text-white">{user.ownerName}</p>
-              <p className="text-[10px] text-green-400">{user.businessName}</p>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <main className="flex-1 flex flex-col min-h-screen">
-        {/* Top bar */}
-        <header className="bg-white border-b border-[#e2e8f0] px-5 py-3 flex items-center justify-between sticky top-0 z-10">
-          <div className="flex items-center gap-2 md:hidden">
-            <img src={logo} alt="TENGABIZ" className="h-12 w-auto" />
-          </div>
-          <div className="hidden md:block">
-            <p className="font-display font-bold text-[#1c1c1e]">{getGreeting(user.ownerName)}</p>
-            <p className="text-xs text-[#718096]">{user.businessName}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <NotificationBell transactions={transactions} />
-            <div className="w-8 h-8 rounded-full bg-[#1a6b3c] flex items-center justify-center text-white font-bold text-sm md:hidden">A</div>
-          </div>
-        </header>
-
-        {/* Page */}
-        <div className="flex-1 p-5 md:p-6 max-w-2xl w-full mx-auto">
+    <div className="min-h-screen bg-[#fdf8f0]">
+      {/* Single-column mobile-first layout */}
+      <main className="max-w-lg mx-auto flex flex-col min-h-screen">
+        {/* Page content */}
+        <div className="flex-1 px-4 pt-4 pb-24">
           {loading ? (
             <div className="flex items-center justify-center h-40">
               <p className="text-sm text-[#718096]">Loading...</p>
@@ -1563,14 +1523,13 @@ export default function App() {
           )}
         </div>
 
-        {/* Mobile bottom nav */}
-        <nav className="md:hidden sticky bottom-0 bg-white border-t border-[#e2e8f0] flex justify-around py-2 z-10">
+        {/* Bottom nav */}
+        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#e2e8f0] flex justify-around py-2 z-10 max-w-lg mx-auto">
           {NAV.map(n => (
-            <button
-              key={n.id}
-              onClick={() => setTab(n.id)}
-              className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg ${tab === n.id ? 'text-[#1a6b3c]' : 'text-[#718096]'}`}
-            >
+            <button key={n.id} onClick={() => setTab(n.id)}
+              className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg ${
+                tab === n.id ? 'text-[#1a6b3c]' : 'text-[#718096]'
+              }`}>
               <span className="text-lg">{n.icon}</span>
               <span className="text-[10px] font-semibold">{n.label}</span>
             </button>
