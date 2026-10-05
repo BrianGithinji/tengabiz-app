@@ -95,9 +95,9 @@ export default function ProfitLockView({ amount, onBack }: Props) {
     if (selected?.id === id) setSelected(null)
   }
 
+  const [reminderDates, setReminderDates] = useState<Record<string, string>>({})
   const inputCls = 'w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]'
   const labelCls = 'text-xs font-semibold text-[#4a5568] block mb-1'
-  const firstName = selected?.name.split(' ')[0] ?? ''
 
   return (
     <>
@@ -205,7 +205,18 @@ export default function ProfitLockView({ amount, onBack }: Props) {
                     {p.methodLabel}{p.methodDetail ? `: ${p.methodDetail}` : ''}
                   </p>
                 </div>
-                <span className="text-[#c0c0c0] text-base leading-none shrink-0 mt-1">›</span>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <span className="text-[#c0c0c0] text-base leading-none">›</span>
+                  {/* Calendar reminder picker */}
+                  <input
+                    type="date"
+                    value={reminderDates[p.id] ?? ''}
+                    onClick={e => e.stopPropagation()}
+                    onChange={e => { e.stopPropagation(); setReminderDates(r => ({ ...r, [p.id]: e.target.value })) }}
+                    className="text-[9px] text-[#94a3b8] border border-[#e2e8f0] rounded-lg px-1 py-0.5 bg-white cursor-pointer"
+                    title="Set payment reminder"
+                  />
+                </div>
               </button>
             ))}
           </div>
@@ -273,8 +284,8 @@ export default function ProfitLockView({ amount, onBack }: Props) {
                 </div>
               </div>
 
-              {/* Transaction ledger */}
-              <div className="mb-4">
+              {/* Transaction ledger — primary focal block */}
+              <div className="mb-5">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-sm">📅</span>
                   <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest">Transactions</p>
@@ -288,15 +299,13 @@ export default function ProfitLockView({ amount, onBack }: Props) {
                   <div className="bg-white rounded-2xl border border-[#e2e8f0] overflow-hidden divide-y divide-[#f0f0f0]">
                     {(txMap[selected.id] ?? []).map((tx, i) => (
                       <div key={i} className="px-4 py-3 flex items-center gap-3">
-                        {/* Date badge */}
                         <div className="w-10 h-10 rounded-xl bg-[#f0faf4] flex items-center justify-center shrink-0">
                           <span className="text-[10px] font-bold text-[#1a6b3c] text-center leading-tight">{tx.date}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-[#1c1c1e]">KES {fmt2(tx.amount)}</p>
+                          <p className="text-sm font-black text-[#1c1c1e] tracking-tight">KES {fmt2(tx.amount)}</p>
                           <p className="text-[11px] text-[#718096] truncate">{tx.method} · Ref: {tx.ref}</p>
                         </div>
-                        {/* Paid badge */}
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full shrink-0">
                           ✓ Paid
                         </span>
@@ -306,7 +315,7 @@ export default function ProfitLockView({ amount, onBack }: Props) {
                 )}
               </div>
 
-              {/* Pay button */}
+              {/* Pay button — below transactions */}
               <button className="w-full py-3.5 rounded-2xl bg-[#1a6b3c] hover:bg-[#0f3d22] text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors mb-5">
                 <span>💳</span>
                 Pay {selected.name}

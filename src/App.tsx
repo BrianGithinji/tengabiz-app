@@ -7,7 +7,7 @@ import SavingsView from './SavingsView'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'dashboard' | 'transactions' | 'savings' | 'loans' | 'settings'
+type Tab = 'dashboard' | 'loans' | 'settings' | 'about'
 type AuthScreen = 'login' | 'register'
 type AppScreen = 'app' | 'setup'
 
@@ -1443,20 +1443,46 @@ function NotificationBell({ transactions }: { transactions: ApiTx[] }) {
   )
 }
 
-// ─── Sidebar Nav ─────────────────────────────────────────────────────────────
+// ─── About View ──────────────────────────────────────────────────────────────
 
-const NAV: { id: Tab; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
-  { id: 'transactions', label: 'Transactions', icon: '↕' },
-  { id: 'savings', label: 'Savings', icon: '◎' },
-  { id: 'loans', label: 'Loan Readiness', icon: '◈' },
-  { id: 'settings', label: 'Profile', icon: '⚙' },
-]
+function AboutView() {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="font-display text-xl font-bold text-[#1c1c1e]">About TENGABIZ</h2>
+        <p className="text-sm text-[#718096] mt-0.5">Smart Business Finance for Kenyan MSMEs</p>
+      </div>
+      <div className="rounded-2xl p-5 text-white" style={{ background: 'linear-gradient(135deg, #1a6b3c 0%, #2d9558 65%, #e8a020 140%)' }}>
+        <p className="font-display font-bold text-lg mb-1">The 60 / 20 / 20 Rule</p>
+        <p className="text-green-100 text-sm leading-relaxed">Every shilling you receive is automatically separated into three protected buckets — so your business always has money for what matters.</p>
+      </div>
+      {[
+        { pct: '60%', label: 'Business Lock', color: '#e8a020', desc: 'Protected for supplier payments, rent, stock, and core operating costs. This money cannot be touched for personal use.' },
+        { pct: '20%', label: 'Savings & Growth', color: '#2563eb', desc: 'Automatically set aside toward your savings goals — equipment, expansion, or an emergency buffer.' },
+        { pct: '20%', label: 'Available (Flexible)', color: '#1a6b3c', desc: 'Liquid funds ready for daily operations, petty cash, and immediate business needs.' },
+      ].map(b => (
+        <div key={b.label} className="bg-white rounded-2xl p-4 border border-[#e2e8f0]">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="font-black text-2xl tracking-tight" style={{ color: b.color }}>{b.pct}</span>
+            <span className="font-display font-bold text-[#1c1c1e]">{b.label}</span>
+          </div>
+          <p className="text-sm text-[#718096] leading-relaxed">{b.desc}</p>
+        </div>
+      ))}
+      <div className="bg-[#f0faf4] rounded-2xl p-4 border border-green-200">
+        <p className="text-xs font-bold text-[#1a6b3c] uppercase tracking-widest mb-1">Why it works</p>
+        <p className="text-sm text-[#4a5568] leading-relaxed">Most small businesses fail because personal and business money mix. TENGABIZ enforces separation automatically — building your credit history and loan readiness with every payment received.</p>
+      </div>
+    </div>
+  )
+}
 
 // ─── App Shell ────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('dashboard')
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [darkMode, setDarkMode] = useState(false)
   const [screen, setScreen] = useState<AppScreen>('app')
   const [user, setUser] = useState<SessionUser | null>(() => {
     const params = new URLSearchParams(window.location.search)
@@ -1538,15 +1564,91 @@ export default function App() {
     setUser(null)
   }
 
+  function navigate(t: Tab) { setTab(t); setDrawerOpen(false) }
+
   if (!user) return <AuthPage onSuccess={handleAuthSuccess} />
   if (screen === 'setup') return <SetupChannel user={user} onDone={handleSetupDone} />
 
+  const bg = darkMode ? 'bg-[#0f1a14]' : 'bg-[#fdf8f0]'
+  const cardBg = darkMode ? 'bg-[#1a2e22]' : 'bg-white'
+
   return (
-    <div className="min-h-screen bg-[#fdf8f0]">
-      {/* Single-column mobile-first layout */}
-      <main className="max-w-lg mx-auto flex flex-col min-h-screen">
+    <div className={`min-h-screen ${bg} transition-colors`}>
+      <main className="max-w-lg mx-auto flex flex-col min-h-screen relative">
+
+        {/* ── Hamburger header bar ── */}
+        <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 bg-[#1a6b3c]">
+          <button onClick={() => setDrawerOpen(true)}
+            className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white text-xl leading-none">
+            ☰
+          </button>
+          <p className="font-display font-bold text-white text-sm tracking-wide">TENGABIZ</p>
+          <div className="w-9" />{/* spacer */}
+        </header>
+
+        {/* ── Side drawer scrim ── */}
+        {drawerOpen && (
+          <div className="fixed inset-0 bg-black/50 z-30" onClick={() => setDrawerOpen(false)} />
+        )}
+
+        {/* ── Side drawer panel ── */}
+        <div className={`fixed top-0 left-0 h-full w-72 z-40 flex flex-col transition-transform duration-300 ${
+          drawerOpen ? 'translate-x-0' : '-translate-x-full'
+        }`} style={{ background: darkMode ? '#0f1a14' : '#fff' }}>
+
+          {/* Drawer header */}
+          <div className="px-5 pt-10 pb-6" style={{ background: 'linear-gradient(135deg, #1a6b3c 0%, #2d9558 100%)' }}>
+            <p className="font-display font-bold text-white text-lg">TENGABIZ</p>
+            <p className="text-green-200 text-xs mt-0.5">{user.businessName}</p>
+            <p className="text-green-300 text-[11px]">{user.ownerName}</p>
+          </div>
+
+          {/* Nav items */}
+          <div className="flex-1 py-4 overflow-y-auto">
+            {[
+              { id: 'dashboard' as Tab, icon: '⊞', label: 'Dashboard' },
+              { id: 'loans' as Tab,     icon: '◈', label: 'Loan Readiness' },
+              { id: 'settings' as Tab,  icon: '⚙', label: 'Profile & Setup' },
+              { id: 'about' as Tab,     icon: 'ℹ', label: 'About the App' },
+            ].map(n => (
+              <button key={n.id} onClick={() => navigate(n.id)}
+                className={`w-full flex items-center gap-4 px-5 py-3.5 text-left transition-colors ${
+                  tab === n.id
+                    ? 'bg-[#f0faf4] text-[#1a6b3c] font-bold'
+                    : darkMode ? 'text-green-200 hover:bg-white/10' : 'text-[#4a5568] hover:bg-[#f7f7f7]'
+                }`}>
+                <span className="text-xl w-6 text-center">{n.icon}</span>
+                <span className="text-sm font-semibold">{n.label}</span>
+                {tab === n.id && <span className="ml-auto w-1.5 h-5 rounded-full bg-[#1a6b3c]" />}
+              </button>
+            ))}
+
+            {/* Dark mode toggle row */}
+            <div className="flex items-center gap-4 px-5 py-3.5">
+              <span className="text-xl w-6 text-center">{darkMode ? '🌙' : '☀️'}</span>
+              <span className={`text-sm font-semibold flex-1 ${darkMode ? 'text-green-200' : 'text-[#4a5568]'}`}>Dark Mode</span>
+              <button onClick={() => setDarkMode(d => !d)}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  darkMode ? 'bg-[#1a6b3c]' : 'bg-[#e2e8f0]'
+                }`}>
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  darkMode ? 'translate-x-5' : 'translate-x-0.5'
+                }`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Sign out */}
+          <div className="px-5 py-4 border-t border-[#e2e8f0]">
+            <button onClick={() => { setDrawerOpen(false); handleLogout() }}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-red-500 bg-red-50 hover:bg-red-100 transition-colors">
+              Sign Out
+            </button>
+          </div>
+        </div>
+
         {/* Page content */}
-        <div className="flex-1 px-4 pt-4 pb-24">
+        <div className="flex-1 px-4 pt-4 pb-8">
           {loading ? (
             <div className="flex items-center justify-center h-40">
               <p className="text-sm text-[#718096]">Loading...</p>
@@ -1554,26 +1656,13 @@ export default function App() {
           ) : (
             <>
               {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} />}
-              {tab === 'transactions' && <Transactions transactions={transactions} />}
-              {tab === 'savings' && <Savings summary={summary} />}
-              {tab === 'loans' && <LoanReadiness transactions={transactions} summary={summary} />}
-              {tab === 'settings' && <Settings user={user} onLogout={handleLogout} />}
+              {tab === 'loans'     && <LoanReadiness transactions={transactions} summary={summary} />}
+              {tab === 'settings'  && <Settings user={user} onLogout={handleLogout} />}
+              {tab === 'about'     && <AboutView />}
             </>
           )}
         </div>
 
-        {/* Bottom nav */}
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#e2e8f0] flex justify-around py-2 z-10 max-w-lg mx-auto">
-          {NAV.map(n => (
-            <button key={n.id} onClick={() => setTab(n.id)}
-              className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg ${
-                tab === n.id ? 'text-[#1a6b3c]' : 'text-[#718096]'
-              }`}>
-              <span className="text-lg">{n.icon}</span>
-              <span className="text-[10px] font-semibold">{n.label}</span>
-            </button>
-          ))}
-        </nav>
       </main>
     </div>
   )

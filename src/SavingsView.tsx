@@ -303,7 +303,7 @@ export default function SavingsView({ amount, onBack }: Props) {
                   </div>
                 </div>
 
-                {/* Transaction ledger */}
+                {/* Transaction ledger — primary focal block, above pay button */}
                 <div className="mb-5">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest">Transactions</p>
@@ -318,18 +318,15 @@ export default function SavingsView({ amount, onBack }: Props) {
                     <div className="bg-white rounded-2xl border border-[#e2e8f0] overflow-hidden divide-y divide-[#f0f0f0]">
                       {txs.map((tx, i) => (
                         <div key={i} className="px-4 py-3 flex items-center gap-3">
-                          {/* Arrow icon */}
                           <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center shrink-0">
                             <span className="text-green-700 text-sm font-bold">↗</span>
                           </div>
-                          {/* Label + ref */}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-[#1c1c1e]">Savings contribution</p>
                             <p className="text-[11px] text-[#718096]">• Ref: {tx.ref}</p>
                           </div>
-                          {/* Amount + date */}
                           <div className="text-right shrink-0">
-                            <p className="text-sm font-bold text-[#1a6b3c]">+ KES {fmt2(tx.amount)}</p>
+                            <p className="text-sm font-black text-[#1a6b3c] tracking-tight">+ KES {fmt2(tx.amount)}</p>
                             <p className="text-[11px] text-[#718096]">{tx.date}</p>
                           </div>
                         </div>
@@ -338,7 +335,7 @@ export default function SavingsView({ amount, onBack }: Props) {
                   )}
                 </div>
 
-                {/* Pay button */}
+                {/* Pay button — below transactions */}
                 <button className="w-full py-3.5 rounded-2xl bg-[#1a6b3c] hover:bg-[#0f3d22] text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors mb-5">
                   <span>💳</span> Pay
                 </button>
