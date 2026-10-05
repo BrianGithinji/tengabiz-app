@@ -592,6 +592,34 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
         </div>
       </div>
 
+      {/* ── Business / Personal toggle ── */}
+      <div className="bg-[#f0f4f0] rounded-2xl p-1 flex gap-1">
+        {(['business', 'personal'] as const).map(v => (
+          <button key={v} onClick={() => setMoneyView(v)}
+            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${
+              moneyView === v ? 'bg-[#1a6b3c] text-white shadow-sm' : 'text-[#4a5568] hover:text-[#1a6b3c]'
+            }`}>
+            {v === 'business' ? 'Business Money' : 'Personal Money'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Payment Infrastructure Channels Strip ── */}
+      <div className="flex gap-2 overflow-x-auto pb-0.5">
+        {[
+          { label: 'Pochi la Biashara', active: hasPochi, icon: hasPochi ? '✓' : '○' },
+          { label: 'Buy Goods Till', active: userChannels.some(c => c.type === 'till'), icon: userChannels.some(c => c.type === 'till') ? '⚡' : '○' },
+          { label: 'PayBill', active: userChannels.some(c => c.type === 'paybill'), icon: userChannels.some(c => c.type === 'paybill') ? '✓' : '○' },
+          { label: 'Kopo Kopo', active: false, icon: '○' },
+        ].map(ch => (
+          <div key={ch.label} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 border ${
+            ch.active ? 'bg-[#0f3d22] text-white border-[#0f3d22]' : 'bg-white text-[#94a3b8] border-[#e2e8f0]'
+          }`}>
+            {ch.icon} {ch.label}
+          </div>
+        ))}
+      </div>
+
       {/* ── Business Balance Card ── */}
       <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0] shadow-sm">
         <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest mb-1">Business Balance</p>
@@ -622,32 +650,6 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
             </p>
             <p className="font-mono-data font-bold text-sm text-[#2563eb] mt-1">KES {fmt2(savings)}</p>
           </div>
-        </div>
-      </div>
-
-      {/* ── Business / Personal toggle ── */}
-      <div className="bg-[#f0f4f0] rounded-2xl p-1 flex gap-1">
-        {(['business', 'personal'] as const).map(v => (
-          <button key={v} onClick={() => setMoneyView(v)}
-            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${
-              moneyView === v ? 'bg-[#1a6b3c] text-white shadow-sm' : 'text-[#4a5568] hover:text-[#1a6b3c]'
-            }`}>
-            {v === 'business' ? 'Business Money' : 'Personal Money'}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Connected channels strip ── */}
-      <div className="flex gap-2 overflow-x-auto pb-0.5">
-        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 border ${
-          hasPochi ? 'bg-[#0f3d22] text-white border-[#0f3d22]' : 'bg-white text-[#94a3b8] border-[#e2e8f0]'
-        }`}>
-          {hasPochi ? '✓' : '○'} Pochi la Biashara
-        </div>
-        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 border ${
-          hasTillOrPaybill ? 'bg-[#0f3d22] text-white border-[#0f3d22]' : 'bg-white text-[#94a3b8] border-[#e2e8f0]'
-        }`}>
-          {hasTillOrPaybill ? '⚡' : '○'} M-PESA Daraja 3.0
         </div>
       </div>
 
