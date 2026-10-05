@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { mpesa, auth, channels, type Transaction as ApiTx, type Summary, type Channel } from './lib/mpesa'
 import logo from './logo.png'
+import AvailableMoneyView from './AvailableMoneyView'
+import ProfitLockView from './ProfitLockView'
+import SavingsView from './SavingsView'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -543,6 +546,8 @@ function fmt2(n: number) {
   return Number(n).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+type DashView = 'main' | 'available' | 'lock' | 'savings'
+
 function Dashboard({ transactions, summary, ownerName, userChannels }: {
   transactions: ApiTx[], summary: Summary, ownerName: string, userChannels: Channel[]
 }) {
@@ -551,6 +556,7 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
   const savings = Number(summary.total_savings) || 0
   const flexible = Number(summary.total_flexible) || 0
   const [moneyView, setMoneyView] = useState<'business' | 'personal'>('business')
+  const [dashView, setDashView] = useState<DashView>('main')
   const initials = ownerName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
   const firstName = ownerName.split(' ')[0]
   const hasPochi = userChannels.some(c => c.type === 'pochi')
@@ -562,6 +568,10 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
     if (s.length === 14) return `${s.slice(6,8)}/${s.slice(4,6)}/${s.slice(0,4)} ${s.slice(8,10)}:${s.slice(10,12)}`
     return new Date(raw).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' })
   }
+
+  if (dashView === 'available') return <AvailableMoneyView amount={flexible} onBack={() => setDashView('main')} />
+  if (dashView === 'lock') return <ProfitLockView amount={businessLock} onBack={() => setDashView('main')} />
+  if (dashView === 'savings') return <SavingsView amount={savings} onBack={() => setDashView('main')} />
 
   return (
     <div className="space-y-4">
@@ -627,29 +637,35 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
           KES {fmt2(totalBalance)}
         </p>
 
-        {/* 3-column rectangular buckets */}
+        {/* 3-column rectangular buckets — each card is clickable */}
         <div className="grid grid-cols-3 gap-2">
           {/* Available (Flexible) */}
-          <div className="bg-[#f0faf4] rounded-xl p-3">
+          <button onClick={() => setDashView('available')}
+            className="bg-[#f0faf4] rounded-xl p-3 text-left active:scale-95 transition-transform">
             <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
               Available <span className="text-[#94a3b8]">(20%)</span>
             </p>
             <p className="font-mono-data font-bold text-sm text-[#1a6b3c] mt-1">KES {fmt2(flexible)}</p>
-          </div>
+            <p className="text-[9px] text-[#94a3b8] mt-1">Tap to view ›</p>
+          </button>
           {/* Business Lock */}
-          <div className="bg-[#fffbeb] rounded-xl p-3">
+          <button onClick={() => setDashView('lock')}
+            className="bg-[#fffbeb] rounded-xl p-3 text-left active:scale-95 transition-transform">
             <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
               🔒 Business Lock <span className="text-[#94a3b8]">(60%)</span>
             </p>
             <p className="font-mono-data font-bold text-sm text-[#e8a020] mt-1">KES {fmt2(businessLock)}</p>
-          </div>
+            <p className="text-[9px] text-[#94a3b8] mt-1">Tap to view ›</p>
+          </button>
           {/* Savings */}
-          <div className="bg-[#eff6ff] rounded-xl p-3">
+          <button onClick={() => setDashView('savings')}
+            className="bg-[#eff6ff] rounded-xl p-3 text-left active:scale-95 transition-transform">
             <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
               🎯 Savings <span className="text-[#94a3b8]">(20%)</span>
             </p>
             <p className="font-mono-data font-bold text-sm text-[#2563eb] mt-1">KES {fmt2(savings)}</p>
-          </div>
+            <p className="text-[9px] text-[#94a3b8] mt-1">Tap to view ›</p>
+          </button>
         </div>
       </div>
 
