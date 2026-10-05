@@ -560,8 +560,9 @@ function AllocationRing({ pct, color, label, amount }: { pct: number; color: str
           <span className="font-mono-data text-[11px] font-bold text-[#1c1c1e] leading-tight text-center">{ringValue}</span>
         </div>
       </div>
-      <p className="font-display text-xs font-semibold text-[#4a5568] text-center leading-tight">{label}</p>
-      <p className="text-[11px] text-[#718096] font-semibold text-center">{pct}%</p>
+      <p className="font-display text-xs font-semibold text-[#4a5568] text-center leading-tight">
+        {label} <span className="text-[10px] font-normal text-[#94a3b8]">({pct}%)</span>
+      </p>
     </div>
   )
 }
@@ -613,12 +614,12 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
 
         {/* Merchant welcome block */}
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm shrink-0">
-            {ownerName.charAt(0).toUpperCase()}
+          <div className="w-10 h-10 rounded-full bg-[#e8a020] border-2 border-white/30 flex items-center justify-center text-[#0f3d22] font-bold text-sm shrink-0 shadow-sm">
+            {ownerName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
           </div>
           <div>
             <p className="text-white text-sm font-semibold leading-tight">{getGreeting(ownerName.split(' ')[0])}</p>
-            <p className="text-green-200 text-xs leading-tight">Business Account</p>
+            <p className="text-green-200 text-xs leading-tight">{ownerName}</p>
           </div>
         </div>
 
@@ -688,39 +689,40 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
         </div>
       </div>
 
-      {/* Alerts */}
-      {transactions.length === 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 items-start">
-          <div>
-            <p className="font-display font-semibold text-amber-800 text-sm">No transactions yet</p>
-            <p className="text-amber-700 text-xs mt-0.5">Payments received via M-PESA will appear here automatically.</p>
-          </div>
-        </div>
-      )}
-
       {/* Recent Transactions */}
       <div className="bg-white rounded-2xl border border-[#e2e8f0] overflow-hidden">
         <div className="px-5 py-4 border-b border-[#e2e8f0] flex items-center justify-between">
-          <h3 className="font-display font-bold text-[#1c1c1e]">Recent Activity</h3>
+          <div>
+            <h3 className="font-display font-bold text-[#1c1c1e]">Recent Activity</h3>
+            <p className="text-xs text-[#718096]">Latest incoming payments</p>
+          </div>
           <span className="text-xs text-[#2d9558] font-semibold cursor-pointer">See all →</span>
         </div>
         {transactions.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-[#718096] text-center">Transactions will appear here once payments come in.</p>
+          <div className="px-5 py-8 flex flex-col items-center gap-2">
+            <div className="w-10 h-10 rounded-full bg-[#f0f4f0] flex items-center justify-center text-[#1a6b3c] text-lg">↓</div>
+            <p className="text-sm font-semibold text-[#4a5568]">No transactions yet</p>
+            <p className="text-xs text-[#718096] text-center">Payments received via M-PESA will appear here automatically.</p>
+          </div>
         ) : transactions.slice(0, 5).map((tx) => (
-          <div key={tx.id} className="px-5 py-3 flex items-center gap-3 border-b border-[#f7f7f7] last:border-0 hover:bg-gray-50">
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-base ${tx.type === 'in' ? 'bg-green-50' : 'bg-red-50'}`}>
+          <div key={tx.id} className="px-5 py-3 flex items-center gap-3 border-b border-[#f7f7f7] last:border-0 hover:bg-[#fafafa] transition-colors">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${
+              tx.type === 'in' ? 'bg-green-50 text-[#1a6b3c]' : 'bg-red-50 text-[#e53e3e]'
+            }`}>
               {tx.type === 'in' ? '↓' : '↑'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[#1c1c1e] truncate">{tx.mpesa_receipt ?? tx.account_ref ?? 'Payment'}</p>
+              <p className="text-sm font-semibold text-[#1c1c1e] truncate">{tx.mpesa_receipt ?? tx.account_ref ?? 'M-PESA Payment'}</p>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[11px] text-[#718096]">{formatDate(tx.transaction_date)}</span>
                 <Badge channel={tx.channel} />
               </div>
             </div>
-            <div className="text-right">
-              <p className={`font-mono-data font-semibold text-sm ${tx.type === 'in' ? 'text-[#1a6b3c]' : 'text-[#e53e3e]'}`}>
-                {tx.type === 'in' ? '+' : '-'}{tx.amount.toLocaleString()}
+            <div className="text-right shrink-0">
+              <p className={`font-mono-data font-bold text-sm ${
+                tx.type === 'in' ? 'text-[#1a6b3c]' : 'text-[#e53e3e]'
+              }`}>
+                {tx.type === 'in' ? '+' : '-'}KES {Number(tx.amount).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
               {!tx.allocated && (
                 <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold">Pending</span>
@@ -729,8 +731,6 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
           </div>
         ))}
       </div>
-
-
     </div>
   )
 }
