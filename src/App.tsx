@@ -4,6 +4,7 @@ import logo from './logo.png'
 import AvailableMoneyView from './AvailableMoneyView'
 import ProfitLockView from './ProfitLockView'
 import SavingsView from './SavingsView'
+import BusinessHub from './BusinessHub'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1656,7 +1657,7 @@ export default function App() {
           ) : (
             <>
               {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} />}
-              {tab === 'loans'     && <LoanReadiness transactions={transactions} summary={summary} />}
+              {tab === 'loans'     && <BusinessHub businessName={user.businessName} ownerName={user.ownerName} />}
               {tab === 'settings'  && <Settings user={user} onLogout={handleLogout} />}
               {tab === 'about'     && <AboutView />}
             </>
