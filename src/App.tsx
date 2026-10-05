@@ -563,27 +563,35 @@ function AllocationRing({ pct, color, label, amount }: { pct: number; color: str
   )
 }
 
-function Dashboard({ transactions, summary, ownerName }: { transactions: ApiTx[], summary: Summary, ownerName: string }) {
+function fmt2(n: number) {
+  return Number(n).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function Dashboard({ transactions, summary, ownerName, userChannels }: {
+  transactions: ApiTx[], summary: Summary, ownerName: string, userChannels: Channel[]
+}) {
   const totalBalance = summary.total_in
   const businessLock = summary.total_business_lock
   const savings = summary.total_savings
   const flexible = summary.total_flexible
-  const weeklyIncome = transactions
-    .filter(t => t.type === 'in')
-    .reduce((s, t) => s + t.amount, 0)
-  const weeklyExpenses = 0 // outgoing not yet tracked via Daraja
+  const totalIncome = transactions.filter(t => t.type === 'in').reduce((s, t) => s + t.amount, 0)
+  const totalExpenses = 0
+  const net = totalIncome - totalExpenses
+  const [moneyView, setMoneyView] = useState<'business' | 'personal'>('business')
 
   function formatDate(raw: string) {
     if (!raw) return ''
     const s = String(raw)
-    if (s.length === 14) {
-      return `${s.slice(6, 8)}/${s.slice(4, 6)}/${s.slice(0, 4)} ${s.slice(8, 10)}:${s.slice(10, 12)}`
-    }
+    if (s.length === 14) return `${s.slice(6,8)}/${s.slice(4,6)}/${s.slice(0,4)} ${s.slice(8,10)}:${s.slice(10,12)}`
     return new Date(raw).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' })
   }
 
+  // Channel connection status
+  const hasPochi = userChannels.some(c => c.type === 'pochi')
+  const hasTillOrPaybill = userChannels.some(c => c.type === 'till' || c.type === 'paybill')
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Balance Hero */}
       <div
         className="rounded-2xl p-6 text-white relative overflow-hidden"
@@ -593,26 +601,55 @@ function Dashboard({ transactions, summary, ownerName }: { transactions: ApiTx[]
           background: 'radial-gradient(circle, white 0%, transparent 70%)',
           transform: 'translate(30%, -30%)'
         }} />
-        <p className="text-green-100 text-sm font-medium mb-1">{getGreeting(ownerName)}</p>
-        <p className="text-green-100 text-sm font-medium mb-1">Total Business Balance</p>
+        <p className="text-green-100 text-sm font-medium mb-0.5">{getGreeting(ownerName.split(' ')[0])}</p>
+        <p className="text-white/60 text-xs italic mb-2">Tenganisha pesa ya biashara na pesa yako binafsi</p>
+        <p className="text-green-100 text-xs font-medium mb-1">Total Business Balance</p>
         <p className="font-display text-4xl font-bold mb-1 tracking-tight">
-          KES {totalBalance.toLocaleString()}
+          KES {fmt2(totalBalance)}
         </p>
         <p className="text-green-200 text-xs font-mono-data">Updated: {transactions[0] ? formatDate(transactions[0].transaction_date) : 'No transactions yet'}</p>
 
-        <div className="mt-5 flex gap-4">
-          <div className="bg-white/15 rounded-xl px-4 py-2 flex-1 text-center">
-            <p className="text-green-100 text-xs">Total Income</p>
-            <p className="font-display font-bold text-lg">{weeklyIncome > 0 ? '+' : ''}{weeklyIncome.toLocaleString()}</p>
+        <div className="mt-5 flex gap-3">
+          <div className="bg-white/15 rounded-xl px-3 py-2 flex-1 text-center">
+            <p className="text-green-100 text-xs">Income</p>
+            <p className="font-display font-bold text-base">{totalIncome > 0 ? '+' : ''}{totalIncome.toLocaleString()}</p>
           </div>
-          <div className="bg-white/15 rounded-xl px-4 py-2 flex-1 text-center">
+          <div className="bg-white/15 rounded-xl px-3 py-2 flex-1 text-center">
             <p className="text-green-100 text-xs">Expenses</p>
-            <p className="font-display font-bold text-lg">{weeklyExpenses > 0 ? '-' : ''}{weeklyExpenses.toLocaleString()}</p>
+            <p className="font-display font-bold text-base">{totalExpenses.toLocaleString()}</p>
           </div>
-          <div className="bg-white/15 rounded-xl px-4 py-2 flex-1 text-center">
+          <div className="bg-white/15 rounded-xl px-3 py-2 flex-1 text-center">
             <p className="text-green-100 text-xs">Net</p>
-            <p className="font-display font-bold text-lg">{(weeklyIncome - weeklyExpenses) > 0 ? '+' : ''}{(weeklyIncome - weeklyExpenses).toLocaleString()}</p>
+            <p className="font-display font-bold text-base">{net > 0 ? '+' : ''}{net.toLocaleString()}</p>
           </div>
+        </div>
+      </div>
+
+      {/* Business / Personal toggle */}
+      <div className="bg-[#f0f4f0] rounded-2xl p-1 flex gap-1">
+        {(['business', 'personal'] as const).map(v => (
+          <button key={v} onClick={() => setMoneyView(v)}
+            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${
+              moneyView === v
+                ? 'bg-[#1a6b3c] text-white shadow-sm'
+                : 'text-[#4a5568] hover:text-[#1a6b3c]'
+            }`}>
+            {v === 'business' ? 'Business Money' : 'Personal Money'}
+          </button>
+        ))}
+      </div>
+
+      {/* Connected channels strip */}
+      <div className="flex gap-2 overflow-x-auto pb-0.5">
+        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 border ${
+          hasPochi ? 'bg-[#0f3d22] text-white border-[#0f3d22]' : 'bg-white text-[#94a3b8] border-[#e2e8f0]'
+        }`}>
+          <span>{hasPochi ? '✓' : '○'}</span> Pochi la Biashara
+        </div>
+        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 border ${
+          hasTillOrPaybill ? 'bg-[#0f3d22] text-white border-[#0f3d22]' : 'bg-white text-[#94a3b8] border-[#e2e8f0]'
+        }`}>
+          <span>{hasTillOrPaybill ? '⚡' : '○'}</span> M-PESA Daraja 3.0
         </div>
       </div>
 
@@ -626,9 +663,9 @@ function Dashboard({ transactions, summary, ownerName }: { transactions: ApiTx[]
           <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full font-semibold">60 · 20 · 20</span>
         </div>
         <div className="flex justify-around">
-          <AllocationRing pct={60} color="#1a6b3c" label="Business Lock" amount={`KES ${businessLock.toLocaleString()}`} />
-          <AllocationRing pct={20} color="#e8a020" label="Savings & Growth" amount={`KES ${savings.toLocaleString()}`} />
-          <AllocationRing pct={20} color="#2563eb" label="Flexible Funds" amount={`KES ${flexible.toLocaleString()}`} />
+          <AllocationRing pct={60} color="#1a6b3c" label="Business Lock" amount={`KES ${fmt2(businessLock)}`} />
+          <AllocationRing pct={20} color="#e8a020" label="Savings & Growth" amount={`KES ${fmt2(savings)}`} />
+          <AllocationRing pct={20} color="#2563eb" label="Flexible Funds" amount={`KES ${fmt2(flexible)}`} />
         </div>
       </div>
 
@@ -1404,6 +1441,10 @@ export default function App() {
   }, [user])
 
   const { transactions, summary, loading } = useLiveData()
+  const [userChannels, setUserChannels] = useState<Channel[]>([])
+  useEffect(() => {
+    if (user) channels.list().then(setUserChannels).catch(() => {})
+  }, [user])
 
   function handleAuthSuccess(u: SessionUser, isNew = false) {
     localStorage.setItem('tengabiz_business', u.businessName)
@@ -1494,7 +1535,7 @@ export default function App() {
             </div>
           ) : (
             <>
-              {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} />}
+              {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} />}
               {tab === 'transactions' && <Transactions transactions={transactions} />}
               {tab === 'savings' && <Savings summary={summary} />}
               {tab === 'loans' && <LoanReadiness transactions={transactions} summary={summary} />}
