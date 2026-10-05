@@ -630,43 +630,64 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
         ))}
       </div>
 
-      {/* ── Business Balance Card ── */}
+      {/* ── Balance Card ── */}
       <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0] shadow-sm">
-        <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest mb-1">Business Balance</p>
+        <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest mb-1">
+          {moneyView === 'business' ? 'Business Balance' : 'Personal Balance'}
+        </p>
         <p className="font-display text-4xl font-extrabold text-[#1c1c1e] tracking-tight mb-4">
           KES {fmt2(totalBalance)}
         </p>
 
-        {/* 3-column rectangular buckets — each card is clickable */}
-        <div className="grid grid-cols-3 gap-2">
-          {/* Available (Flexible) */}
-          <button onClick={() => setDashView('available')}
-            className="bg-[#f0faf4] rounded-xl p-3 text-left active:scale-95 transition-transform">
-            <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
-              Available <span className="text-[#94a3b8]">(20%)</span>
-            </p>
-            <p className="font-mono-data font-bold text-sm text-[#1a6b3c] mt-1">KES {fmt2(flexible)}</p>
-            <p className="text-[9px] text-[#94a3b8] mt-1">Tap to view ›</p>
-          </button>
-          {/* Business Lock */}
-          <button onClick={() => setDashView('lock')}
-            className="bg-[#fffbeb] rounded-xl p-3 text-left active:scale-95 transition-transform">
-            <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
-              🔒 Business Lock <span className="text-[#94a3b8]">(60%)</span>
-            </p>
-            <p className="font-mono-data font-bold text-sm text-[#e8a020] mt-1">KES {fmt2(businessLock)}</p>
-            <p className="text-[9px] text-[#94a3b8] mt-1">Tap to view ›</p>
-          </button>
-          {/* Savings */}
-          <button onClick={() => setDashView('savings')}
-            className="bg-[#eff6ff] rounded-xl p-3 text-left active:scale-95 transition-transform">
-            <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
-              🎯 Savings <span className="text-[#94a3b8]">(20%)</span>
-            </p>
-            <p className="font-mono-data font-bold text-sm text-[#2563eb] mt-1">KES {fmt2(savings)}</p>
-            <p className="text-[9px] text-[#94a3b8] mt-1">Tap to view ›</p>
-          </button>
-        </div>
+        {moneyView === 'business' ? (
+          /* Business view — 3-column grid with all three buckets */
+          <div className="grid grid-cols-3 gap-2">
+            <button onClick={() => setDashView('available')}
+              className="bg-[#f0faf4] rounded-xl p-3 text-left active:scale-95 transition-transform">
+              <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
+                Available <span className="text-[#94a3b8]">(20%)</span>
+              </p>
+              <p className="font-mono-data font-bold text-sm text-[#1a6b3c] mt-1">KES {fmt2(flexible)}</p>
+              <p className="text-[9px] text-[#94a3b8] mt-1">Tap to view ›</p>
+            </button>
+            <button onClick={() => setDashView('lock')}
+              className="bg-[#fffbeb] rounded-xl p-3 text-left active:scale-95 transition-transform">
+              <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
+                🔒 Business Lock <span className="text-[#94a3b8]">(60%)</span>
+              </p>
+              <p className="font-mono-data font-bold text-sm text-[#e8a020] mt-1">KES {fmt2(businessLock)}</p>
+              <p className="text-[9px] text-[#94a3b8] mt-1">Tap to view ›</p>
+            </button>
+            <button onClick={() => setDashView('savings')}
+              className="bg-[#eff6ff] rounded-xl p-3 text-left active:scale-95 transition-transform">
+              <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
+                🎯 Savings <span className="text-[#94a3b8]">(20%)</span>
+              </p>
+              <p className="font-mono-data font-bold text-sm text-[#2563eb] mt-1">KES {fmt2(savings)}</p>
+              <p className="text-[9px] text-[#94a3b8] mt-1">Tap to view ›</p>
+            </button>
+          </div>
+        ) : (
+          /* Personal view — 2-column grid, Business Lock hidden */
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setDashView('available')}
+              className="bg-[#f0faf4] rounded-xl p-3 text-left active:scale-95 transition-transform">
+              <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
+                Available <span className="text-[#94a3b8]">(60%)</span>
+              </p>
+              <p className="font-mono-data font-bold text-sm text-[#1a6b3c] mt-1">KES {fmt2(flexible)}</p>
+              <p className="text-[9px] text-[#94a3b8] mt-1">Tap to view ›</p>
+            </button>
+            <button onClick={() => setDashView('savings')}
+              className="bg-[#eff6ff] rounded-xl p-3 text-left active:scale-95 transition-transform">
+              <p className="text-[10px] font-semibold text-[#4a5568] leading-tight">
+                🎯 Savings <span className="text-[#94a3b8]">(40%)</span>
+              </p>
+              <p className="font-mono-data font-bold text-sm text-[#2563eb] mt-1">KES {fmt2(savings)}</p>
+              <p className="text-[9px] text-[#94a3b8] mt-1">Tap to view ›</p>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Transactions feed ── */}
