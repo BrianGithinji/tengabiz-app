@@ -543,22 +543,25 @@ function AllocationRing({ pct, color, label, amount }: { pct: number; color: str
   const r = 30
   const circ = 2 * Math.PI * r
   const dash = (pct / 100) * circ
+  // Strip "KES " prefix for inside the ring to save space
+  const ringValue = amount.replace('KES ', '')
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className="relative w-20 h-20">
+      <div className="relative w-24 h-24">
         <svg viewBox="0 0 72 72" className="w-full h-full -rotate-90">
-          <circle cx="36" cy="36" r={r} fill="none" stroke="#e2e8f0" strokeWidth="7" />
+          <circle cx="36" cy="36" r={r} fill="none" stroke="#e2e8f0" strokeWidth="6" />
           <circle
-            cx="36" cy="36" r={r} fill="none" stroke={color} strokeWidth="7"
+            cx="36" cy="36" r={r} fill="none" stroke={color} strokeWidth="6"
             strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
           />
         </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="font-display text-base font-bold text-[#1c1c1e]">{pct}%</span>
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-1">
+          <span className="text-[9px] font-semibold text-[#718096] leading-none mb-0.5">KES</span>
+          <span className="font-mono-data text-[11px] font-bold text-[#1c1c1e] leading-tight text-center">{ringValue}</span>
         </div>
       </div>
       <p className="font-display text-xs font-semibold text-[#4a5568] text-center leading-tight">{label}</p>
-      <p className="font-mono-data text-sm font-semibold" style={{ color }}>{amount}</p>
+      <p className="text-[11px] text-[#718096] font-semibold text-center">{pct}%</p>
     </div>
   )
 }
@@ -601,8 +604,24 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
           background: 'radial-gradient(circle, white 0%, transparent 70%)',
           transform: 'translate(30%, -30%)'
         }} />
-        <p className="text-green-100 text-sm font-medium mb-0.5">{getGreeting(ownerName.split(' ')[0])}</p>
-        <p className="text-white/60 text-xs italic mb-2">Tenganisha pesa ya biashara na pesa yako binafsi</p>
+
+        {/* App branding block */}
+        <div className="mb-3">
+          <p className="font-display text-lg font-bold text-white tracking-wide">TengaBiz</p>
+          <p className="text-white/60 text-xs italic">Tenganisha pesa ya biashara na pesa yako binafsi</p>
+        </div>
+
+        {/* Merchant welcome block */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm shrink-0">
+            {ownerName.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p className="text-white text-sm font-semibold leading-tight">{getGreeting(ownerName.split(' ')[0])}</p>
+            <p className="text-green-200 text-xs leading-tight">Business Account</p>
+          </div>
+        </div>
+
         <p className="text-green-100 text-xs font-medium mb-1">Total Business Balance</p>
         <p className="font-display text-4xl font-bold mb-1 tracking-tight">
           KES {fmt2(totalBalance)}
