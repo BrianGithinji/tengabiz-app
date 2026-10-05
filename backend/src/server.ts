@@ -51,4 +51,5 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`TENGABIZ API running on http://0.0.0.0:${PORT}`)
   console.log(`M-PESA environment: ${process.env.MPESA_ENV ?? 'sandbox'}`)
+  console.log(`OTP bypass: ${process.env.DEV_OTP_BYPASS === '1' ? 'ENABLED' : 'disabled'}`)
 })
