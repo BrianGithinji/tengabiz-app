@@ -102,7 +102,11 @@ router.post('/verify-otp', async (req, res) => {
     await pool.query('DELETE FROM otp_sessions WHERE phone = $1', [phone])
     res.status(400).json({ error: 'OTP expired' }); return
   }
-  if (session.otp !== otp) { res.status(400).json({ error: 'Invalid OTP' }); return }
+  // Dev bypass: set DEV_OTP_BYPASS=1 in Render env vars to unblock testing without a live SMS gateway.
+  // Remove this env var once the SMS gateway is active. Never hardcode bypass codes in source.
+  const bypassEnabled = process.env.DEV_OTP_BYPASS === '1'
+  if (!bypassEnabled && session.otp !== otp) { res.status(400).json({ error: 'Invalid OTP' }); return }
+  if (bypassEnabled && session.otp !== otp) { console.warn(`[otp-bypass] Used for ${phone}`) }
 
   // Delete the session — single-use
   await pool.query('DELETE FROM otp_sessions WHERE phone = $1', [phone])
