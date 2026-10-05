@@ -27,8 +27,7 @@ try {
     CREATE TABLE IF NOT EXISTS otp_sessions (
       phone TEXT PRIMARY KEY,
       otp TEXT NOT NULL,
-      expires_at TIMESTAMPTZ NOT NULL,
-      verified BOOLEAN NOT NULL DEFAULT FALSE
+      expires_at TIMESTAMPTZ NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS channels (

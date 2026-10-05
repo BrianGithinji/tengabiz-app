@@ -162,11 +162,8 @@ function calcCreditScore(transactions: ApiTx[], summary: Summary) {
   }
 }
 
-function getGreeting() {
-  const h = new Date().getHours()
-  if (h < 12) return 'Habari ya asubuhi'
-  if (h < 17) return 'Habari ya mchana'
-  return 'Habari ya jioni'
+function getGreeting(ownerName: string) {
+  return `Jambo, ${ownerName}!`
 }
 
 // ─── Google Maps helpers ──────────────────────────────────────────────────────
@@ -245,37 +242,116 @@ const CHANNEL_LABELS: Record<string, string> = {
 
 // ─── Components ──────────────────────────────────────────────────────────────
 
-// ─── Auth screens ───────────────────────────────────────────────────────────────
+// ─── Auth screens ────────────────────────────────────────────────────────────
+
+const LOCKOUT_KEY = 'tengabiz_lockout'
+const ATTEMPTS_KEY = 'tengabiz_attempts'
+const MAX_ATTEMPTS = 3
+const LOCKOUT_MS = 5 * 60 * 1000
+
+function getLockoutRemaining(): number {
+  const until = Number(localStorage.getItem(LOCKOUT_KEY) ?? 0)
+  return Math.max(0, until - Date.now())
+}
+
+function recordFailedAttempt(): { locked: boolean } {
+  const attempts = Number(localStorage.getItem(ATTEMPTS_KEY) ?? 0) + 1
+  localStorage.setItem(ATTEMPTS_KEY, String(attempts))
+  if (attempts >= MAX_ATTEMPTS) {
+    localStorage.setItem(LOCKOUT_KEY, String(Date.now() + LOCKOUT_MS))
+    localStorage.removeItem(ATTEMPTS_KEY)
+    return { locked: true }
+  }
+  return { locked: false }
+}
+
+function clearAttempts() {
+  localStorage.removeItem(ATTEMPTS_KEY)
+  localStorage.removeItem(LOCKOUT_KEY)
+}
 
 function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolean) => void }) {
   const [screen, setScreen] = useState<AuthScreen>('login')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
-  const [regForm, setRegForm] = useState({
-    email: '', password: '', confirmPassword: '', businessName: '', ownerName: '', phone: '', description: '', businessType: '',
-    location: '', lat: null as number | null, lng: null as number | null,
-  })
+
+  // ── Login state ──
+  const [loginPhone, setLoginPhone] = useState('')
+  const [loginPin, setLoginPin] = useState('')
+  const [lockRemaining, setLockRemaining] = useState(getLockoutRemaining)
+
+  useEffect(() => {
+    if (lockRemaining <= 0) return
+    const t = setInterval(() => {
+      const r = getLockoutRemaining()
+      setLockRemaining(r)
+      if (r <= 0) clearInterval(t)
+    }, 1000)
+    return () => clearInterval(t)
+  }, [lockRemaining])
+
+  // ── Register wizard state ──
+  const [slide, setSlide] = useState(0)
+  const [reg, setReg] = useState({ firstName: '', lastName: '', phone: '', email: '' })
+  const [otp, setOtp] = useState(['', '', '', '', '', ''])
+  const [otpToken, setOtpToken] = useState('')
+  const [pin, setPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([])
 
   async function handleLogin(e: React.FormEvent) {
-    e.preventDefault(); setError(''); setLoading(true)
+    e.preventDefault()
+    if (lockRemaining > 0) return
+    setError(''); setLoading(true)
     try {
-      const res = await auth.login(loginForm.email, loginForm.password)
+      const res = await auth.login(loginPhone, loginPin)
+      clearAttempts()
       localStorage.setItem('tengabiz_token', res.token)
       onSuccess({ businessName: res.businessName, ownerName: res.ownerName, token: res.token })
+    } catch (err: any) {
+      const { locked } = recordFailedAttempt()
+      if (locked) {
+        setLockRemaining(LOCKOUT_MS)
+        setError('Too many failed attempts. Locked for 5 minutes.')
+      } else {
+        const left = MAX_ATTEMPTS - Number(localStorage.getItem(ATTEMPTS_KEY) ?? 0)
+        setError(`Incorrect phone or PIN. ${left} attempt${left === 1 ? '' : 's'} remaining.`)
+      }
+    } finally { setLoading(false) }
+  }
+
+  async function handleSendOtp(e: React.FormEvent) {
+    e.preventDefault(); setError(''); setLoading(true)
+    try {
+      await auth.sendOtp(reg.phone)
+      setSlide(1)
+    } catch (err: any) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault(); setError(''); setLoading(true)
+    try {
+      const code = otp.join('')
+      const res = await auth.verifyOtp(reg.phone, code)
+      setOtpToken(res.otpToken)
+      setSlide(2)
     } catch (err: any) { setError(err.message) }
     finally { setLoading(false) }
   }
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault(); setError('')
-    if (regForm.password !== regForm.confirmPassword) { setError('Passwords do not match'); return }
+    if (pin.length !== 4) { setError('PIN must be 4 digits'); return }
+    if (pin !== confirmPin) { setError('PINs do not match'); return }
     setLoading(true)
     try {
       const res = await auth.register({
-        email: regForm.email, password: regForm.password, businessName: regForm.businessName,
-        ownerName: regForm.ownerName, phone: regForm.phone, businessType: regForm.businessType, description: regForm.description,
-        location: regForm.location, lat: regForm.lat ?? undefined, lng: regForm.lng ?? undefined,
+        firstName: reg.firstName, lastName: reg.lastName,
+        phone: reg.phone, email: reg.email || undefined,
+        pin, otpToken,
+        businessName: `${reg.firstName} ${reg.lastName}`.trim(),
+        ownerName: `${reg.firstName} ${reg.lastName}`.trim(),
       })
       localStorage.setItem('tengabiz_token', res.token)
       onSuccess({ businessName: res.businessName, ownerName: res.ownerName, token: res.token }, true)
@@ -283,104 +359,170 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
     finally { setLoading(false) }
   }
 
+  function handleOtpKey(i: number, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Backspace' && !otp[i] && i > 0) otpRefs.current[i - 1]?.focus()
+  }
+
+  function handleOtpChange(i: number, val: string) {
+    if (!/^\d*$/.test(val)) return
+    const next = [...otp]
+    next[i] = val.slice(-1)
+    setOtp(next)
+    if (val && i < 5) otpRefs.current[i + 1]?.focus()
+  }
+
+  const lockMins = Math.ceil(lockRemaining / 60000)
+
+  const bgCard = 'bg-white rounded-2xl p-6 border border-[#e2e8f0] shadow-sm overflow-y-auto'
+  const inputCls = 'w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]'
+  const labelCls = 'text-xs font-semibold text-[#4a5568] block mb-1'
+  const btnPrimary = 'w-full py-3 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22] disabled:opacity-60'
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative"
-      style={{ backgroundImage: `url(/tenga.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-      <div className="absolute inset-0 bg-black/50" />
+      style={{ backgroundImage: 'url(/tenga.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+      <div className="absolute inset-0 bg-black/55" />
       <div className="w-full max-w-sm relative z-10">
-        <div className="flex items-center gap-2 justify-center mb-4">
+        <div className="flex justify-center mb-4">
           <img src={logo} alt="TENGABIZ" className="h-20 w-auto" />
         </div>
-        <div className="bg-white rounded-2xl p-6 border border-[#e2e8f0] shadow-sm overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+        <div className={bgCard} style={{ maxHeight: 'calc(100vh - 140px)' }}>
+          {/* Tab switcher */}
           <div className="flex gap-1 mb-6 bg-[#f7f7f7] rounded-xl p-1">
             {(['login', 'register'] as AuthScreen[]).map(s => (
-              <button key={s} onClick={() => { setScreen(s); setError('') }}
+              <button key={s} onClick={() => { setScreen(s); setError(''); setSlide(0) }}
                 className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
                   screen === s ? 'bg-white text-[#1c1c1e] shadow-sm' : 'text-[#718096]'
                 }`}>{s === 'login' ? 'Sign In' : 'Register'}</button>
             ))}
           </div>
+
           {screen === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-[#4a5568] block mb-1">Email</label>
-                <input type="email" required value={loginForm.email}
-                  onChange={e => setLoginForm(f => ({ ...f, email: e.target.value }))}
-                  className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+                <label className={labelCls}>Phone Number</label>
+                <input type="tel" required value={loginPhone} placeholder="e.g. 0712345678"
+                  onChange={e => setLoginPhone(e.target.value)}
+                  className={inputCls} />
               </div>
               <div>
-                <label className="text-xs font-semibold text-[#4a5568] block mb-1">Password</label>
-                <input type="password" required value={loginForm.password}
-                  onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
-                  className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+                <label className={labelCls}>4-Digit Security PIN</label>
+                <input type="password" inputMode="numeric" pattern="[0-9]*" maxLength={4} required
+                  value={loginPin} placeholder="••••"
+                  onChange={e => { if (/^\d*$/.test(e.target.value)) setLoginPin(e.target.value.slice(0, 4)) }}
+                  className={inputCls} />
               </div>
-              {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-              <button type="submit" disabled={loading}
-                className="w-full py-3 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22] disabled:opacity-60">
+              {lockRemaining > 0 && (
+                <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                  Account locked. Try again in {lockMins} minute{lockMins !== 1 ? 's' : ''}.
+                </p>
+              )}
+              {error && !lockRemaining && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+              <button type="submit" disabled={loading || lockRemaining > 0} className={btnPrimary}>
                 {loading ? 'Signing in...' : 'Sign In'}
               </button>
-              <div className="relative flex items-center gap-3 my-1">
-                <div className="flex-1 h-px bg-[#e2e8f0]" />
-                <span className="text-xs text-[#718096]">or</span>
-                <div className="flex-1 h-px bg-[#e2e8f0]" />
-              </div>
-              <a href="/api/auth/google"
-                className="w-full py-3 border border-[#e2e8f0] rounded-xl font-semibold text-sm text-[#1c1c1e] hover:bg-gray-50 flex items-center justify-center gap-2">
-                <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-                Continue with Google
-              </a>
             </form>
           ) : (
-            <form onSubmit={handleRegister} className="space-y-3">
-              {([
-                { label: 'Business Name', key: 'businessName', type: 'text', required: true },
-                { label: 'Your Name', key: 'ownerName', type: 'text', required: true },
-                { label: 'Email', key: 'email', type: 'email', required: true },
-                { label: 'Password (min 6 chars)', key: 'password', type: 'password', required: true },
-                { label: 'Confirm Password', key: 'confirmPassword', type: 'password', required: true },
-                { label: 'Phone Number', key: 'phone', type: 'tel', required: true },
-              ] as const).map(f => (
-                <div key={f.key}>
-                  <label className="text-xs font-semibold text-[#4a5568] block mb-1">{f.label}</label>
-                  <input type={f.type} required={f.required}
-                    value={regForm[f.key as keyof typeof regForm] as string}
-                    onChange={e => setRegForm(r => ({ ...r, [f.key]: e.target.value }))}
-                    className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
-                </div>
-              ))}
-              <div>
-                <label className="text-xs font-semibold text-[#4a5568] block mb-1">Business Type</label>
-                <select value={regForm.businessType}
-                  onChange={e => setRegForm(r => ({ ...r, businessType: e.target.value }))}
-                  className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c] bg-white">
-                  <option value="">Select business type...</option>
-                  {[
-                    'Grocery shop', 'Cosmetics & Beauty', 'Clothing & Apparel', 'Electronics & Phones',
-                    'Hardware & Building', 'Pharmacy & Health', 'Food & Restaurant', 'Salon & Barbershop',
-                    'Stationery & Books', 'Livestock & Farming', 'Transport & Logistics', 'Other',
-                  ].map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+            <div>
+              {/* Progress dots */}
+              <div className="flex justify-center gap-2 mb-5">
+                {[0, 1, 2].map(i => (
+                  <div key={i} className={`h-1.5 rounded-full transition-all ${
+                    i === slide ? 'w-6 bg-[#1a6b3c]' : i < slide ? 'w-4 bg-[#2d9558]' : 'w-4 bg-[#e2e8f0]'
+                  }`} />
+                ))}
               </div>
-              <div>
-                <label className="text-xs font-semibold text-[#4a5568] block mb-1">Business Location</label>
-                <LocationPicker
-                  value={{ address: regForm.location, lat: regForm.lat, lng: regForm.lng }}
-                  onChange={v => setRegForm(r => ({ ...r, location: v.address, lat: v.lat, lng: v.lng }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-[#4a5568] block mb-1">Business Description</label>
-                <textarea required rows={3} value={regForm.description}
-                  placeholder="e.g. We sell fresh vegetables and groceries..."
-                  onChange={e => setRegForm(r => ({ ...r, description: e.target.value }))}
-                  className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c] resize-none" />
-              </div>
-              {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-              <button type="submit" disabled={loading}
-                className="w-full py-3 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22] disabled:opacity-60">
-                {loading ? 'Creating account...' : 'Create Account'}
-              </button>
-            </form>
+
+              {slide === 0 && (
+                <form onSubmit={handleSendOtp} className="space-y-4">
+                  <p className="text-sm font-semibold text-[#1c1c1e] mb-1">Your Details</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelCls}>First Name</label>
+                      <input required value={reg.firstName} placeholder="Jane"
+                        onChange={e => setReg(r => ({ ...r, firstName: e.target.value }))}
+                        className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Last Name</label>
+                      <input required value={reg.lastName} placeholder="Wanjiku"
+                        onChange={e => setReg(r => ({ ...r, lastName: e.target.value }))}
+                        className={inputCls} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Phone Number</label>
+                    <input type="tel" required value={reg.phone} placeholder="0712345678"
+                      onChange={e => setReg(r => ({ ...r, phone: e.target.value }))}
+                      className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Email (optional)</label>
+                    <input type="email" value={reg.email} placeholder="jane@example.com"
+                      onChange={e => setReg(r => ({ ...r, email: e.target.value }))}
+                      className={inputCls} />
+                  </div>
+                  {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+                  <button type="submit" disabled={loading} className={btnPrimary}>
+                    {loading ? 'Sending code...' : 'Send Verification Code'}
+                  </button>
+                </form>
+              )}
+
+              {slide === 1 && (
+                <form onSubmit={handleVerifyOtp} className="space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[#1c1c1e]">Enter Verification Code</p>
+                    <p className="text-xs text-[#718096] mt-0.5">Sent to {reg.phone}</p>
+                  </div>
+                  <div className="flex gap-2 justify-center">
+                    {otp.map((d, i) => (
+                      <input key={i}
+                        ref={el => { otpRefs.current[i] = el }}
+                        type="text" inputMode="numeric" maxLength={1} value={d}
+                        onChange={e => handleOtpChange(i, e.target.value)}
+                        onKeyDown={e => handleOtpKey(i, e)}
+                        className="w-10 h-12 text-center text-lg font-bold border-2 rounded-xl focus:outline-none focus:border-[#1a6b3c] border-[#e2e8f0]" />
+                    ))}
+                  </div>
+                  {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+                  <button type="submit" disabled={loading || otp.join('').length < 6} className={btnPrimary}>
+                    {loading ? 'Verifying...' : 'Verify Code'}
+                  </button>
+                  <button type="button" onClick={() => { setSlide(0); setOtp(['','','','','','']); setError('') }}
+                    className="w-full text-xs text-[#718096] hover:text-[#1a6b3c] font-semibold py-1">
+                    Back
+                  </button>
+                </form>
+              )}
+
+              {slide === 2 && (
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[#1c1c1e]">Create Your PIN</p>
+                    <p className="text-xs text-[#718096] mt-0.5">You'll use this to sign in every time</p>
+                  </div>
+                  <div>
+                    <label className={labelCls}>4-Digit PIN</label>
+                    <input type="password" inputMode="numeric" pattern="[0-9]*" maxLength={4} required
+                      value={pin} placeholder="••••"
+                      onChange={e => { if (/^\d*$/.test(e.target.value)) setPin(e.target.value.slice(0, 4)) }}
+                      className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Confirm PIN</label>
+                    <input type="password" inputMode="numeric" pattern="[0-9]*" maxLength={4} required
+                      value={confirmPin} placeholder="••••"
+                      onChange={e => { if (/^\d*$/.test(e.target.value)) setConfirmPin(e.target.value.slice(0, 4)) }}
+                      className={inputCls} />
+                  </div>
+                  {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+                  <button type="submit" disabled={loading} className={btnPrimary}>
+                    {loading ? 'Creating account...' : 'Create Account'}
+                  </button>
+                </form>
+              )}
+            </div>
           )}
         </div>
         <p className="text-center text-xs text-white/70 mt-4">Smart Business Finance for Kenyan MSMEs</p>
@@ -451,7 +593,7 @@ function Dashboard({ transactions, summary, ownerName }: { transactions: ApiTx[]
           background: 'radial-gradient(circle, white 0%, transparent 70%)',
           transform: 'translate(30%, -30%)'
         }} />
-        <p className="text-green-100 text-sm font-medium mb-1">{getGreeting()}, {ownerName}!</p>
+        <p className="text-green-100 text-sm font-medium mb-1">{getGreeting(ownerName)}</p>
         <p className="text-green-100 text-sm font-medium mb-1">Total Business Balance</p>
         <p className="font-display text-4xl font-bold mb-1 tracking-tight">
           KES {totalBalance.toLocaleString()}
@@ -461,15 +603,15 @@ function Dashboard({ transactions, summary, ownerName }: { transactions: ApiTx[]
         <div className="mt-5 flex gap-4">
           <div className="bg-white/15 rounded-xl px-4 py-2 flex-1 text-center">
             <p className="text-green-100 text-xs">Total Income</p>
-            <p className="font-display font-bold text-lg">+{weeklyIncome.toLocaleString()}</p>
+            <p className="font-display font-bold text-lg">{weeklyIncome > 0 ? '+' : ''}{weeklyIncome.toLocaleString()}</p>
           </div>
           <div className="bg-white/15 rounded-xl px-4 py-2 flex-1 text-center">
             <p className="text-green-100 text-xs">Expenses</p>
-            <p className="font-display font-bold text-lg">-{weeklyExpenses.toLocaleString()}</p>
+            <p className="font-display font-bold text-lg">{weeklyExpenses > 0 ? '-' : ''}{weeklyExpenses.toLocaleString()}</p>
           </div>
           <div className="bg-white/15 rounded-xl px-4 py-2 flex-1 text-center">
             <p className="text-green-100 text-xs">Net</p>
-            <p className="font-display font-bold text-lg">+{(weeklyIncome - weeklyExpenses).toLocaleString()}</p>
+            <p className="font-display font-bold text-lg">{(weeklyIncome - weeklyExpenses) > 0 ? '+' : ''}{(weeklyIncome - weeklyExpenses).toLocaleString()}</p>
           </div>
         </div>
       </div>
@@ -1234,6 +1376,33 @@ export default function App() {
     }
   }, [user])
 
+  // Idle auto-lock: clear session after 60s in background/idle
+  useEffect(() => {
+    if (!user) return
+    let idleTimer: ReturnType<typeof setTimeout>
+    function startTimer() {
+      clearTimeout(idleTimer)
+      idleTimer = setTimeout(() => {
+        localStorage.removeItem('tengabiz_token')
+        localStorage.removeItem('tengabiz_business')
+        localStorage.removeItem('tengabiz_owner')
+        setUser(null)
+      }, 60_000)
+    }
+    function cancelTimer() { clearTimeout(idleTimer) }
+    document.addEventListener('visibilitychange', () => {
+      document.hidden ? startTimer() : cancelTimer()
+    })
+    window.addEventListener('blur', startTimer)
+    window.addEventListener('focus', cancelTimer)
+    return () => {
+      clearTimeout(idleTimer)
+      document.removeEventListener('visibilitychange', startTimer)
+      window.removeEventListener('blur', startTimer)
+      window.removeEventListener('focus', cancelTimer)
+    }
+  }, [user])
+
   const { transactions, summary, loading } = useLiveData()
 
   function handleAuthSuccess(u: SessionUser, isNew = false) {
@@ -1308,7 +1477,7 @@ export default function App() {
             <img src={logo} alt="TENGABIZ" className="h-12 w-auto" />
           </div>
           <div className="hidden md:block">
-            <p className="font-display font-bold text-[#1c1c1e]">{getGreeting()}, {user.ownerName}</p>
+            <p className="font-display font-bold text-[#1c1c1e]">{getGreeting(user.ownerName)}</p>
             <p className="text-xs text-[#718096]">{user.businessName}</p>
           </div>
           <div className="flex items-center gap-2">

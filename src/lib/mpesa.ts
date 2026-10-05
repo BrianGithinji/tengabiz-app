@@ -121,12 +121,12 @@ export const auth = {
     post<{ success: boolean }>('/api/auth/send-otp', { phone }),
 
   verifyOtp: (phone: string, otp: string) =>
-    post<{ success: boolean }>('/api/auth/verify-otp', { phone, otp }),
+    post<{ success: boolean; otpToken: string }>('/api/auth/verify-otp', { phone, otp }),
 
   register: (body: {
     firstName: string; lastName: string; phone: string; email?: string; pin: string
-    businessName: string; ownerName: string; businessType?: string
-    location?: string; description?: string; lat?: number; lng?: number
+    businessName: string; ownerName: string; otpToken: string
+    businessType?: string; location?: string; description?: string; lat?: number; lng?: number
   }) => post<AuthResponse>('/api/auth/register', body),
 
   login: (phone: string, pin: string) =>

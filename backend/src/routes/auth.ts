@@ -39,6 +39,7 @@ const registerSchema = z.object({
   description: z.string().optional(),
   lat: z.number().optional(),
   lng: z.number().optional(),
+  otpToken: z.string().min(1),
 })
 
 const loginSchema = z.object({
@@ -55,12 +56,15 @@ router.post('/send-otp', async (req, res) => {
   const { phone } = req.body
   if (!phone) { res.status(400).json({ error: 'Phone required' }); return }
 
+  // Clear expired entries for this phone
+  await pool.query('DELETE FROM otp_sessions WHERE phone = $1 AND expires_at < NOW()', [phone])
+
   const otp = Math.floor(100000 + Math.random() * 900000).toString()
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 min
 
   await pool.query(
     `INSERT INTO otp_sessions (phone, otp, expires_at) VALUES ($1, $2, $3)
-     ON CONFLICT (phone) DO UPDATE SET otp = $2, expires_at = $3, verified = FALSE`,
+     ON CONFLICT (phone) DO UPDATE SET otp = $2, expires_at = $3`,
     [phone, otp, expiresAt]
   )
 
@@ -94,11 +98,18 @@ router.post('/verify-otp', async (req, res) => {
   if (rows.length === 0) { res.status(400).json({ error: 'No OTP sent to this number' }); return }
 
   const session = rows[0]
-  if (new Date() > new Date(session.expires_at)) { res.status(400).json({ error: 'OTP expired' }); return }
+  if (new Date() > new Date(session.expires_at)) {
+    await pool.query('DELETE FROM otp_sessions WHERE phone = $1', [phone])
+    res.status(400).json({ error: 'OTP expired' }); return
+  }
   if (session.otp !== otp) { res.status(400).json({ error: 'Invalid OTP' }); return }
 
-  await pool.query('UPDATE otp_sessions SET verified = TRUE WHERE phone = $1', [phone])
-  res.json({ success: true })
+  // Delete the session — single-use
+  await pool.query('DELETE FROM otp_sessions WHERE phone = $1', [phone])
+
+  // Issue a short-lived signed token proving this phone was verified
+  const otpToken = jwt.sign({ phone, verified: true }, process.env.JWT_SECRET!, { expiresIn: '15m' })
+  res.json({ success: true, otpToken })
 })
 
 // POST /api/auth/register
@@ -109,14 +120,19 @@ router.post('/register', async (req, res) => {
     return
   }
 
-  const { firstName, lastName, phone, email, pin, businessName, ownerName, businessType, location, description, lat, lng } = result.data
+  const { firstName, lastName, phone, email, pin, businessName, ownerName, businessType, location, description, lat, lng, otpToken } = result.data
 
-  // Verify OTP was completed
-  const { rows: otpRows } = await pool.query(
-    'SELECT verified FROM otp_sessions WHERE phone = $1', [phone]
-  )
-  if (otpRows.length === 0 || !otpRows[0].verified) {
-    res.status(403).json({ error: 'Phone not verified. Please complete OTP verification.' })
+  // Validate the signed OTP token — proves phone was verified in this session
+  let tokenPayload: { phone: string; verified: boolean }
+  try {
+    tokenPayload = jwt.verify(otpToken, process.env.JWT_SECRET!) as typeof tokenPayload
+  } catch {
+    res.status(403).json({ error: 'OTP token invalid or expired. Please verify your phone again.' })
+    return
+  }
+
+  if (!tokenPayload.verified || tokenPayload.phone !== phone) {
+    res.status(403).json({ error: 'Phone verification mismatch.' })
     return
   }
 
@@ -132,8 +148,6 @@ router.post('/register', async (req, res) => {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [id, email || null, pinHash, businessName, fullName, phone, businessType ?? null, location ?? null, description ?? null, lat ?? null, lng ?? null]
   )
-
-  await pool.query('DELETE FROM otp_sessions WHERE phone = $1', [phone])
 
   res.status(201).json({ token: signToken(id), userId: id, businessName, ownerName: fullName })
 })
