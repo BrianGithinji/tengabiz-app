@@ -549,8 +549,8 @@ function fmt2(n: number) {
 
 type DashView = 'main' | 'available' | 'lock' | 'savings'
 
-function Dashboard({ transactions, summary, ownerName, userChannels }: {
-  transactions: ApiTx[], summary: Summary, ownerName: string, userChannels: Channel[]
+function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen }: {
+  transactions: ApiTx[], summary: Summary, ownerName: string, userChannels: Channel[], onMenuOpen: () => void
 }) {
   const totalBalance = Number(summary.total_in) || 0
   const businessLock = Number(summary.total_business_lock) || 0
@@ -579,20 +579,22 @@ function Dashboard({ transactions, summary, ownerName, userChannels }: {
 
       {/* ── Top Identity Header ── */}
       <div className="rounded-3xl overflow-hidden" style={{ background: 'linear-gradient(135deg, #1a6b3c 0%, #2d9558 65%, #e8a020 140%)' }}>
-        {/* Branding row */}
-        <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src={logo} alt="" className="h-8 w-auto" />
-            <div>
-              <p className="font-display text-base font-bold text-white leading-tight">TENGABIZ</p>
-              <p className="text-white/60 text-[10px] italic leading-tight">Tenganisha pesa ya biashara na pesa yako binafsi</p>
-            </div>
+        {/* Branding + hamburger row */}
+        <div className="pt-4 px-4 pb-3 flex items-center gap-3">
+          <button onClick={onMenuOpen}
+            className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white text-xl leading-none shrink-0">
+            ☰
+          </button>
+          <img src={logo} alt="" className="h-8 w-auto shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="font-display text-base font-bold text-white leading-tight">TENGABIZ</p>
+            <p className="text-white/60 text-[10px] italic leading-tight truncate">Tenganisha pesa ya biashara na pesa yako binafsi</p>
           </div>
           <NotificationBellInline transactions={transactions} />
         </div>
 
         {/* Profile row */}
-        <div className="px-5 pb-5 flex items-center gap-3">
+        <div className="px-4 pb-5 flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center shrink-0">
             <span className="text-white font-bold text-base">{initials}</span>
           </div>
@@ -1577,16 +1579,6 @@ export default function App() {
     <div className={`min-h-screen ${bg} transition-colors`}>
       <main className="max-w-lg mx-auto flex flex-col min-h-screen relative">
 
-        {/* ── Hamburger header bar ── */}
-        <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 bg-[#1a6b3c]">
-          <button onClick={() => setDrawerOpen(true)}
-            className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white text-xl leading-none">
-            ☰
-          </button>
-          <p className="font-display font-bold text-white text-sm tracking-wide">TENGABIZ</p>
-          <div className="w-9" />{/* spacer */}
-        </header>
-
         {/* ── Side drawer scrim ── */}
         {drawerOpen && (
           <div className="fixed inset-0 bg-black/50 z-30" onClick={() => setDrawerOpen(false)} />
@@ -1656,7 +1648,7 @@ export default function App() {
             </div>
           ) : (
             <>
-              {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} />}
+              {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} onMenuOpen={() => setDrawerOpen(true)} />}
               {tab === 'loans'     && <BusinessHub businessName={user.businessName} ownerName={user.ownerName} />}
               {tab === 'settings'  && <Settings user={user} onLogout={handleLogout} />}
               {tab === 'about'     && <AboutView />}
