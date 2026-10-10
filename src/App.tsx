@@ -563,6 +563,29 @@ function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen 
   const hasPochi = userChannels.some(c => c.type === 'pochi')
   const hasTillOrPaybill = userChannels.some(c => c.type === 'till' || c.type === 'paybill')
 
+  const [simOpen, setSimOpen] = useState(false)
+  const [simAmount, setSimAmount] = useState('2500')
+  const [simLoading, setSimLoading] = useState(false)
+  const [simResult, setSimResult] = useState<{ businessLock: number; savings: number; available: number } | null>(null)
+
+  async function runSimulation() {
+    setSimLoading(true); setSimResult(null)
+    try {
+      const res = await fetch('/api/internal-payment/trigger-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          TransID: `SIM${Date.now().toString(36).toUpperCase().slice(-7)}`,
+          TransAmount: String(Number(simAmount) || 2500),
+          MSISDN: '254712345678',
+        }),
+      })
+      const data = await res.json()
+      if (data.split) setSimResult(data.split)
+    } catch (err) { console.error('[Sim]', err) }
+    finally { setSimLoading(false) }
+  }
+
   function formatDate(raw: string) {
     if (!raw) return ''
     const s = String(raw)
@@ -631,7 +654,47 @@ function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen 
             {ch.icon} {ch.label}
           </div>
         ))}
+        {/* Simulate button */}
+        <button onClick={() => { setSimOpen(true); setSimResult(null) }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 border bg-[#fffbeb] text-[#e8a020] border-[#e8a020] hover:bg-[#e8a020] hover:text-white transition-colors">
+          ⚡ Simulate Test Inflow
+        </button>
       </div>
+
+      {/* ── Simulate Transaction Bottom Sheet ── */}
+      {simOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setSimOpen(false)} />
+          <div className="fixed bottom-0 left-0 right-0 z-50 max-w-lg mx-auto bg-white rounded-t-3xl p-6 shadow-2xl">
+            <div className="w-10 h-1 bg-[#e2e8f0] rounded-full mx-auto mb-5" />
+            <p className="font-display font-bold text-[#1c1c1e] text-base mb-1">⚡ Simulate Test Inflow</p>
+            <p className="text-xs text-[#718096] mb-5">Fires a mock payment through the 60/20/20 allocation engine</p>
+            <div className="mb-4">
+              <label className="text-xs font-semibold text-[#4a5568] block mb-1">Amount (KES)</label>
+              <input
+                type="number" min="1" value={simAmount}
+                onChange={e => setSimAmount(e.target.value)}
+                placeholder="e.g. 2500"
+                className="w-full border border-[#e2e8f0] rounded-xl px-4 py-3 text-sm font-semibold focus:outline-none focus:border-[#1a6b3c]"
+              />
+            </div>
+            {simResult && (
+              <div className="mb-4 bg-[#f0faf4] rounded-xl p-4 border border-green-200">
+                <p className="text-xs font-bold text-[#1a6b3c] mb-2">✓ Split Applied</p>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div><p className="text-[10px] text-[#718096]">Business Lock</p><p className="font-bold text-sm text-[#e8a020]">KES {simResult.businessLock.toLocaleString()}</p></div>
+                  <div><p className="text-[10px] text-[#718096]">Savings</p><p className="font-bold text-sm text-[#2563eb]">KES {simResult.savings.toLocaleString()}</p></div>
+                  <div><p className="text-[10px] text-[#718096]">Available</p><p className="font-bold text-sm text-[#1a6b3c]">KES {simResult.available.toLocaleString()}</p></div>
+                </div>
+              </div>
+            )}
+            <button onClick={runSimulation} disabled={simLoading}
+              className="w-full py-3.5 bg-[#1a6b3c] text-white rounded-xl font-bold text-sm hover:bg-[#0f3d22] disabled:opacity-60 transition-colors">
+              {simLoading ? 'Processing...' : 'Execute 60/20/20 Split'}
+            </button>
+          </div>
+        </>
+      )}
 
       {/* ── Balance Card ── */}
       <div className="bg-white rounded-2xl p-5 border border-[#e2e8f0] shadow-sm">

@@ -26,6 +26,7 @@ app.use('/uploads', express.static(uploadsDir))
 // ── Routes (must be before static) ───────────────────────────────────────────
 app.use('/api/mpesa', mpesaRoutes)
 app.use('/api/payments', paymentsRoutes)
+app.use('/api/internal-payment', paymentsRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/channels', channelsRoutes)
 
