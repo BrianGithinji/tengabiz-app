@@ -73,7 +73,7 @@ router.post('/register', validate(registerSchema), async (req, res) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[auth/register] Failed:', message)
-    res.status(500).json({ error: 'Unable to create your account. Please try again.' })
+    res.status(500).json({ error: 'Unable to create your account. Please try again.', details: message })
   }
 })
 
