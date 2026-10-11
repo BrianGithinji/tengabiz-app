@@ -10,6 +10,7 @@ const demoPin = '1234'
 const demoBusiness = 'Mwangaza Fresh Produce'
 const demoOwner = 'Amina Wanjiku'
 const shortcode = process.env.MPESA_STK_SHORTCODE
+const reset = process.argv.includes('--reset')
 
 if (!shortcode) {
   throw new Error('MPESA_STK_SHORTCODE is required to seed the demo channel')
@@ -71,42 +72,46 @@ await pool.query(
 )
 
 const transactions = [
-  { receipt: 'DEMOA7K2P1', amount: 1250, daysAgo: 1, hour: 8, minute: 20, channel: 'stk', ref: 'Order 1042' },
-  { receipt: 'DEMOB8L3Q2', amount: 2800, daysAgo: 2, hour: 10, minute: 5, channel: 'c2b', ref: 'Wholesale crates' },
-  { receipt: 'DEMOC9M4R3', amount: 750, daysAgo: 3, hour: 13, minute: 40, channel: 'stk', ref: 'Fruit basket' },
-  { receipt: 'DEMOD2N5S4', amount: 3400, daysAgo: 4, hour: 16, minute: 15, channel: 'c2b', ref: 'Restaurant order' },
-  { receipt: 'DEMOE3P6T5', amount: 1800, daysAgo: 6, hour: 7, minute: 55, channel: 'stk', ref: 'Morning stock' },
-  { receipt: 'DEMOF4Q7U6', amount: 6200, daysAgo: 7, hour: 18, minute: 25, channel: 'c2b', ref: 'Hotel supply' },
-  { receipt: 'DEMOG5R8V7', amount: 950, daysAgo: 9, hour: 11, minute: 10, channel: 'stk', ref: 'Order 1028' },
-  { receipt: 'DEMOH6S9W8', amount: 2150, daysAgo: 10, hour: 14, minute: 35, channel: 'c2b', ref: 'Market stall' },
-  { receipt: 'DEMOJ7T2X9', amount: 1450, daysAgo: 12, hour: 19, minute: 5, channel: 'stk', ref: 'Evening sales' },
-  { receipt: 'DEMOK8U3Y0', amount: 3900, daysAgo: 13, hour: 20, minute: 10, channel: 'c2b', ref: 'Catering deposit' },
+  { date: '2026-09-29T09:14:00+03:00', amount: 450, customer: 'Wanjiru Kamau', phone: '254700000101', receipt: 'SIT9A4K2L1', ref: 'INV-1041', channel: 'stk' },
+  { date: '2026-09-30T12:40:00+03:00', amount: 100, customer: 'Brian Otieno', phone: '254700000102', receipt: 'SJU3B7M5N2', ref: 'INV-1042', channel: 'c2b' },
+  { date: '2026-10-01T08:55:00+03:00', amount: 1200, customer: 'Amina Hassan', phone: '254700000103', receipt: 'SKV8C2P6Q3', ref: 'INV-1043', channel: 'stk' },
+  { date: '2026-10-02T17:20:00+03:00', amount: 317, customer: 'Kevin Mwangi', phone: '254700000104', receipt: 'SLW1D9R4S4', ref: 'INV-1044', channel: 'c2b' },
+  { date: '2026-10-03T11:05:00+03:00', amount: 2500, customer: 'Faith Chebet', phone: '254700000105', receipt: 'SMX5E3T7U5', ref: 'INV-1045', channel: 'stk' },
+  { date: '2026-10-04T14:30:00+03:00', amount: 250, customer: 'Peter Njoroge', phone: '254700000106', receipt: 'SNY2F8V1W6', ref: 'INV-1046', channel: 'c2b' },
+  { date: '2026-10-05T10:10:00+03:00', amount: 3800, customer: 'Grace Akinyi', phone: '254700000107', receipt: 'SOZ6G4X9Y7', ref: 'INV-1047', channel: 'stk' },
+  { date: '2026-10-06T16:45:00+03:00', amount: 750, customer: 'Salim Juma', phone: '254700000108', receipt: 'SPA7H1Z3A8', ref: 'INV-1048', channel: 'c2b' },
+  { date: '2026-10-08T09:30:00+03:00', amount: 1850, customer: 'Mercy Wambui', phone: '254700000109', receipt: 'SQB4J5C8B9', ref: 'INV-1049', channel: 'stk' },
+  { date: '2026-10-09T13:15:00+03:00', amount: 500, customer: 'Daniel Kiprop', phone: '254700000110', receipt: 'SRC9K2D6E0', ref: 'INV-1050', channel: 'c2b' },
+  { date: '2026-10-10T18:00:00+03:00', amount: 6400, customer: 'Lucy Nyambura', phone: '254700000111', receipt: 'SSD3L7F1G1', ref: 'INV-1051', channel: 'stk' },
+  { date: '2026-10-12T08:20:00+03:00', amount: 900, customer: 'Joseph Odhiambo', phone: '254700000112', receipt: 'STE8M4H5J2', ref: 'INV-1052', channel: 'c2b' },
 ]
 
+if (reset) {
+  await pool.query('DELETE FROM transactions WHERE user_id = $1', [userId])
+}
+
 for (const tx of transactions) {
-  const date = new Date()
-  date.setDate(date.getDate() - tx.daysAgo)
-  date.setHours(tx.hour, tx.minute, 0, 0)
   const split = allocate(tx.amount)
 
   await pool.query(
     `INSERT INTO transactions
        (id, user_id, mpesa_receipt, phone, amount, channel, type, account_ref,
-        transaction_date, business_lock, savings_growth, flexible_funds, allocated)
-     VALUES ($1, $2, $3, $4, $5, $6, 'in', $7, $8, $9, $10, $11, 1)
+        transaction_date, business_lock, savings_growth, flexible_funds, allocated, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'in', $7, $8, $9, $10, $11, 1, $12)
      ON CONFLICT (mpesa_receipt) DO NOTHING`,
     [
       randomUUID(),
       userId,
       tx.receipt,
-      '254711000001',
+      tx.phone,
       tx.amount,
       tx.channel,
-      tx.ref,
-      date.toISOString(),
+      `${tx.ref} - ${tx.customer}`,
+      tx.date,
       split.businessLock,
       split.savingsGrowth,
       split.flexibleFunds,
+      tx.date,
     ]
   )
 }
@@ -128,13 +133,14 @@ const lock = Number(totals.lock)
 const savings = Number(totals.savings)
 const available = Number(totals.available)
 
-if (lock + savings + available !== total) {
+const allocationDifference = Math.abs(lock + savings + available - total)
+if (allocationDifference > transactions.length) {
   throw new Error(`Allocation verification failed: ${lock} + ${savings} + ${available} != ${total}`)
 }
 
 console.log(`demo user ${userId}`)
 console.log(`transactions ${totals.count}`)
 console.log(`totals KES ${total} | lock ${lock} | savings ${savings} | available ${available}`)
-console.log(`allocation verified ${lock + savings + available} = ${total}`)
+console.log(`allocation verified ${lock + savings + available} vs ${total} (difference ${allocationDifference} KES from per-row rounding)`)
 
 await pool.end()

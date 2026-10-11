@@ -13,6 +13,7 @@ import passport from './passport.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT ?? 3000
+const frontendOrigin = (process.env.FRONTEND_ORIGIN ?? 'http://localhost:8443').replace(/\/$/, '')
 const requiredConfig = [
   'DATABASE_URL',
   'MPESA_CONSUMER_KEY',
@@ -29,7 +30,7 @@ const uploadsDir = path.join(__dirname, '../../uploads')
 mkdirSync(uploadsDir, { recursive: true })
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:8443' }))
+app.use(cors({ origin: frontendOrigin }))
 app.use(express.json())
 app.use(passport.initialize())
 app.use('/uploads', express.static(uploadsDir))
