@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "seed:demo": "tsx src/seed-demo.ts"
   },
   "dependencies": {
     "@types/multer": "^2.2.0",
