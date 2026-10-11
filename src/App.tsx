@@ -297,11 +297,8 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
   // ── Register wizard state ──
   const [slide, setSlide] = useState(0)
   const [reg, setReg] = useState({ firstName: '', lastName: '', phone: '', email: '' })
-  const [otp, setOtp] = useState(['', '', '', '', '', ''])
-  const [otpToken, setOtpToken] = useState('')
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
-  const otpRefs = useRef<(HTMLInputElement | null)[]>([])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -324,24 +321,9 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
     } finally { setLoading(false) }
   }
 
-  async function handleSendOtp(e: React.FormEvent) {
-    e.preventDefault(); setError(''); setLoading(true)
-    try {
-      await auth.sendOtp(reg.phone)
-      setSlide(1)
-    } catch (err: any) { setError(err.message) }
-    finally { setLoading(false) }
-  }
-
-  async function handleVerifyOtp(e: React.FormEvent) {
-    e.preventDefault(); setError(''); setLoading(true)
-    try {
-      const code = otp.join('')
-      const res = await auth.verifyOtp(reg.phone, code)
-      setOtpToken(res.otpToken)
-      setSlide(2)
-    } catch (err: any) { setError(err.message) }
-    finally { setLoading(false) }
+  function handleSendDetails(e: React.FormEvent) {
+    e.preventDefault(); setError('')
+    setSlide(1)
   }
 
   async function handleRegister(e: React.FormEvent) {
@@ -353,7 +335,7 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
       const res = await auth.register({
         firstName: reg.firstName, lastName: reg.lastName,
         phone: reg.phone, email: reg.email || undefined,
-        pin, otpToken,
+        pin,
         businessName: `${reg.firstName} ${reg.lastName}`.trim(),
         ownerName: `${reg.firstName} ${reg.lastName}`.trim(),
       })
@@ -361,18 +343,6 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
       onSuccess({ businessName: res.businessName, ownerName: res.ownerName, token: res.token }, true)
     } catch (err: any) { setError(err.message) }
     finally { setLoading(false) }
-  }
-
-  function handleOtpKey(i: number, e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Backspace' && !otp[i] && i > 0) otpRefs.current[i - 1]?.focus()
-  }
-
-  function handleOtpChange(i: number, val: string) {
-    if (!/^\d*$/.test(val)) return
-    const next = [...otp]
-    next[i] = val.slice(-1)
-    setOtp(next)
-    if (val && i < 5) otpRefs.current[i + 1]?.focus()
   }
 
   const lockMins = Math.ceil(lockRemaining / 60000)
@@ -430,7 +400,7 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
             <div>
               {/* Progress dots */}
               <div className="flex justify-center gap-2 mb-5">
-                {[0, 1, 2].map(i => (
+                {[0, 1].map(i => (
                   <div key={i} className={`h-1.5 rounded-full transition-all ${
                     i === slide ? 'w-6 bg-[#1a6b3c]' : i < slide ? 'w-4 bg-[#2d9558]' : 'w-4 bg-[#e2e8f0]'
                   }`} />
@@ -438,7 +408,7 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
               </div>
 
               {slide === 0 && (
-                <form onSubmit={handleSendOtp} className="space-y-4">
+                <form onSubmit={handleSendDetails} className="space-y-4">
                   <p className="text-sm font-semibold text-[#1c1c1e] mb-1">Your Details</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -468,39 +438,12 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
                   </div>
                   {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
                   <button type="submit" disabled={loading} className={btnPrimary}>
-                    {loading ? 'Sending code...' : 'Send Verification Code'}
+                    Continue
                   </button>
                 </form>
               )}
 
               {slide === 1 && (
-                <form onSubmit={handleVerifyOtp} className="space-y-4">
-                  <div>
-                    <p className="text-sm font-semibold text-[#1c1c1e]">Enter Verification Code</p>
-                    <p className="text-xs text-[#718096] mt-0.5">Sent to {reg.phone}</p>
-                  </div>
-                  <div className="flex gap-2 justify-center">
-                    {otp.map((d, i) => (
-                      <input key={i}
-                        ref={el => { otpRefs.current[i] = el }}
-                        type="text" inputMode="numeric" maxLength={1} value={d}
-                        onChange={e => handleOtpChange(i, e.target.value)}
-                        onKeyDown={e => handleOtpKey(i, e)}
-                        className="w-10 h-12 text-center text-lg font-bold border-2 rounded-xl focus:outline-none focus:border-[#1a6b3c] border-[#e2e8f0]" />
-                    ))}
-                  </div>
-                  {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-                  <button type="submit" disabled={loading || otp.join('').length < 6} className={btnPrimary}>
-                    {loading ? 'Verifying...' : 'Verify Code'}
-                  </button>
-                  <button type="button" onClick={() => { setSlide(0); setOtp(['','','','','','']); setError('') }}
-                    className="w-full text-xs text-[#718096] hover:text-[#1a6b3c] font-semibold py-1">
-                    Back
-                  </button>
-                </form>
-              )}
-
-              {slide === 2 && (
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div>
                     <p className="text-sm font-semibold text-[#1c1c1e]">Create Your PIN</p>

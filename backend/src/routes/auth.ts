@@ -39,7 +39,6 @@ const registerSchema = z.object({
   description: z.string().optional(),
   lat: z.number().optional(),
   lng: z.number().optional(),
-  otpToken: z.string().min(1),
 })
 
 const loginSchema = z.object({
@@ -51,71 +50,6 @@ function signToken(userId: string) {
   return jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: '30d' })
 }
 
-// POST /api/auth/send-otp
-router.post('/send-otp', async (req, res) => {
-  const { phone } = req.body
-  if (!phone) { res.status(400).json({ error: 'Phone required' }); return }
-
-  // Clear expired entries for this phone
-  await pool.query('DELETE FROM otp_sessions WHERE phone = $1 AND expires_at < NOW()', [phone])
-
-  const otp = Math.floor(100000 + Math.random() * 900000).toString()
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 min
-
-  await pool.query(
-    `INSERT INTO otp_sessions (phone, otp, expires_at) VALUES ($1, $2, $3)
-     ON CONFLICT (phone) DO UPDATE SET otp = $2, expires_at = $3`,
-    [phone, otp, expiresAt]
-  )
-
-  // SMS gateway — use Africa's Talking or any provider via env
-  const smsUrl = process.env.SMS_API_URL
-  const smsKey = process.env.SMS_API_KEY
-  if (smsUrl && smsKey) {
-    try {
-      await fetch(smsUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apiKey': smsKey },
-        body: JSON.stringify({ to: phone, message: `Your TENGABIZ verification code is: ${otp}. Valid for 10 minutes.` }),
-      })
-    } catch (e) { console.warn('[sms] Failed to send OTP:', e) }
-  } else {
-    // Dev fallback — log OTP to console
-    console.log(`[otp] ${phone} → ${otp}`)
-  }
-
-  res.json({ success: true })
-})
-
-// POST /api/auth/verify-otp
-router.post('/verify-otp', async (req, res) => {
-  const { phone, otp } = req.body
-  if (!phone || !otp) { res.status(400).json({ error: 'Phone and OTP required' }); return }
-
-  const { rows } = await pool.query(
-    'SELECT * FROM otp_sessions WHERE phone = $1', [phone]
-  )
-  if (rows.length === 0) { res.status(400).json({ error: 'No OTP sent to this number' }); return }
-
-  const session = rows[0]
-  if (new Date() > new Date(session.expires_at)) {
-    await pool.query('DELETE FROM otp_sessions WHERE phone = $1', [phone])
-    res.status(400).json({ error: 'OTP expired' }); return
-  }
-  // Dev bypass: set DEV_OTP_BYPASS=1 in Render env vars to unblock testing without a live SMS gateway.
-  // Remove this env var once the SMS gateway is active. Never hardcode bypass codes in source.
-  const bypassEnabled = process.env.DEV_OTP_BYPASS === '1'
-  if (!bypassEnabled && session.otp !== otp) { res.status(400).json({ error: 'Invalid OTP' }); return }
-  if (bypassEnabled && session.otp !== otp) { console.warn(`[otp-bypass] Used for ${phone}`) }
-
-  // Delete the session — single-use
-  await pool.query('DELETE FROM otp_sessions WHERE phone = $1', [phone])
-
-  // Issue a short-lived signed token proving this phone was verified
-  const otpToken = jwt.sign({ phone, verified: true }, process.env.JWT_SECRET!, { expiresIn: '15m' })
-  res.json({ success: true, otpToken })
-})
-
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   const result = registerSchema.safeParse(req.body)
@@ -124,21 +58,7 @@ router.post('/register', async (req, res) => {
     return
   }
 
-  const { firstName, lastName, phone, email, pin, businessName, ownerName, businessType, location, description, lat, lng, otpToken } = result.data
-
-  // Validate the signed OTP token — proves phone was verified in this session
-  let tokenPayload: { phone: string; verified: boolean }
-  try {
-    tokenPayload = jwt.verify(otpToken, process.env.JWT_SECRET!) as typeof tokenPayload
-  } catch {
-    res.status(403).json({ error: 'OTP token invalid or expired. Please verify your phone again.' })
-    return
-  }
-
-  if (!tokenPayload.verified || tokenPayload.phone !== phone) {
-    res.status(403).json({ error: 'Phone verification mismatch.' })
-    return
-  }
+  const { firstName, lastName, phone, email, pin, businessName, ownerName, businessType, location, description, lat, lng } = result.data
 
   const existing = await pool.query('SELECT id FROM users WHERE phone = $1', [phone])
   if (existing.rows.length > 0) { res.status(409).json({ error: 'Phone number already registered' }); return }

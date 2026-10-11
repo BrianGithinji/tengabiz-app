@@ -24,12 +24,6 @@ try {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
-    CREATE TABLE IF NOT EXISTS otp_sessions (
-      phone TEXT PRIMARY KEY,
-      otp TEXT NOT NULL,
-      expires_at TIMESTAMPTZ NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS channels (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
