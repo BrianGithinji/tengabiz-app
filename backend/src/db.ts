@@ -64,6 +64,11 @@ try {
   `)
   // Migrations — add columns that may be missing from older table versions
   await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS business_name TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_name TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS location TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS business_photo TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS description TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
