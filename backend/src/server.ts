@@ -13,6 +13,17 @@ import passport from './passport.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT ?? 3000
+const requiredConfig = [
+  'DATABASE_URL',
+  'MPESA_CONSUMER_KEY',
+  'MPESA_CONSUMER_SECRET',
+  'MPESA_STK_SHORTCODE',
+  'MPESA_PASSKEY',
+  'CALLBACK_BASE_URL',
+]
+for (const name of requiredConfig) {
+  if (!process.env[name]) console.error(`[config] Missing required variable: ${name}`)
+}
 
 const uploadsDir = path.join(__dirname, '../../uploads')
 mkdirSync(uploadsDir, { recursive: true })

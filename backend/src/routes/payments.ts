@@ -7,6 +7,7 @@ import {
 import { allocate } from '../daraja/callback.js'
 import { randomUUID } from 'crypto'
 import pool from '../db.js'
+import { requireAuth, type AuthRequest } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -29,7 +30,7 @@ router.post('/trigger-validation', (req, res) => {
 
 // POST /api/internal-payment/trigger-confirmation
 // Mirrors Safaricom confirmation — runs full 60/20/20 split and persists
-router.post('/trigger-confirmation', async (req, res) => {
+router.post('/trigger-confirmation', requireAuth, async (req: AuthRequest, res) => {
   const { TransID, TransAmount, MSISDN } = req.body ?? {}
   const amount = Number(TransAmount)
 
@@ -40,15 +41,21 @@ router.post('/trigger-confirmation', async (req, res) => {
 
   const { businessLock, savingsGrowth, flexibleFunds } = allocate(amount)
 
-  await pool.query(
-    `INSERT INTO transactions
-       (id, user_id, mpesa_receipt, phone, amount, channel, type, account_ref,
-        transaction_date, business_lock, savings_growth, flexible_funds, allocated)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-     ON CONFLICT (mpesa_receipt) DO NOTHING`,
-    [randomUUID(), null, TransID, MSISDN, amount, 'sim', 'in', null,
-     new Date().toISOString(), businessLock, savingsGrowth, flexibleFunds, 1]
-  ).catch(err => console.error('[Sim Confirmation] DB error:', err.message))
+  try {
+    await pool.query(
+      `INSERT INTO transactions
+         (id, user_id, mpesa_receipt, phone, amount, channel, type, account_ref,
+          transaction_date, business_lock, savings_growth, flexible_funds, allocated)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ON CONFLICT (mpesa_receipt) DO NOTHING`,
+      [randomUUID(), req.userId, TransID, MSISDN, amount, 'sim', 'in', null,
+       new Date().toISOString(), businessLock, savingsGrowth, flexibleFunds, 1]
+    )
+  } catch (err: any) {
+    console.error('[Sim Confirmation] DB error:', err.message)
+    res.status(500).json({ error: 'Failed to save transaction' })
+    return
+  }
 
   console.log(`[Sim Confirmation] KES ${amount} → Lock ${businessLock} | Savings ${savingsGrowth} | Available ${flexibleFunds}`)
   res.json({

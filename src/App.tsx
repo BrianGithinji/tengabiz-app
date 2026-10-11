@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { mpesa, auth, channels, type Transaction as ApiTx, type Summary, type Channel } from './lib/mpesa'
 import logo from './logo.png'
 import AvailableMoneyView from './AvailableMoneyView'
@@ -108,6 +108,21 @@ function useLiveData(authToken: string | null) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [txs, sum] = await Promise.all([mpesa.getTransactions(), mpesa.getSummary()])
+      setTransactions(txs)
+      setSummary(sum)
+    } catch (err: unknown) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     let active = true
 
@@ -147,7 +162,7 @@ function useLiveData(authToken: string | null) {
     return () => { active = false }
   }, [authToken])
 
-  return { transactions, summary, loading, error }
+  return { transactions, summary, loading, error, refresh }
 }
 
 // ─── Credit Score Formula ─────────────────────────────────────────────────────
@@ -525,8 +540,8 @@ function fmt2(n: number) {
 
 type DashView = 'main' | 'available' | 'lock' | 'savings'
 
-function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen }: {
-  transactions: ApiTx[], summary: Summary, ownerName: string, userChannels: Channel[], onMenuOpen: () => void
+function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen, refresh }: {
+  transactions: ApiTx[], summary: Summary, ownerName: string, userChannels: Channel[], onMenuOpen: () => void, refresh: () => Promise<void>
 }) {
   const totalBalance = Number(summary.total_in) || 0
   const businessLock = Number(summary.total_business_lock) || 0
@@ -549,7 +564,10 @@ function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen 
     try {
       const res = await fetch('/api/internal-payment/trigger-confirmation', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('tengabiz_token') ?? ''}`,
+        },
         body: JSON.stringify({
           TransID: `SIM${Date.now().toString(36).toUpperCase().slice(-7)}`,
           TransAmount: String(Number(simAmount) || 2500),
@@ -557,7 +575,9 @@ function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen 
         }),
       })
       const data = await res.json()
+      if (!res.ok) throw new Error(data?.error ?? `Simulation failed: ${res.status}`)
       if (data.split) setSimResult(data.split)
+      await refresh()
     } catch (err) { console.error('[Sim]', err) }
     finally { setSimLoading(false) }
   }
@@ -1579,7 +1599,7 @@ export default function App() {
     }
   }, [user])
 
-  const { transactions, summary, loading, error } = useLiveData(user?.token ?? null)
+  const { transactions, summary, loading, error, refresh } = useLiveData(user?.token ?? null)
   const [userChannels, setUserChannels] = useState<Channel[]>([])
   useEffect(() => {
     if (user) channels.list().then(setUserChannels).catch(() => {})
@@ -1693,7 +1713,7 @@ export default function App() {
             </div>
           ) : (
             <>
-              {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} onMenuOpen={() => setDrawerOpen(true)} />}
+              {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} onMenuOpen={() => setDrawerOpen(true)} refresh={refresh} />}
               {tab === 'loans'     && <BusinessHub businessName={user.businessName} ownerName={user.ownerName} />}
               {tab === 'settings'  && <Settings user={user} onLogout={handleLogout} />}
               {tab === 'about'     && <AboutView />}
