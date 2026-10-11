@@ -2,12 +2,18 @@ export async function readJsonResponse<T>(res: Response): Promise<T> {
   const text = await res.text()
 
   if (!text.trim()) {
-    throw new Error(`Request failed (${res.status}): The server returned an empty response.`)
+    const message = `Request failed (${res.status}): The server returned an empty response.`
+    console.error('[API]', message)
+    throw new Error(message)
   }
 
   try {
-    return JSON.parse(text) as T
+    const data = JSON.parse(text) as T
+    if (!res.ok) console.error(`[API] ${res.status}`, data)
+    return data
   } catch {
-    throw new Error(`Request failed (${res.status}): The server returned an invalid response.`)
+    const message = `Request failed (${res.status}): The server returned an invalid response.`
+    console.error('[API]', message, text.slice(0, 200))
+    throw new Error(message)
   }
 }
