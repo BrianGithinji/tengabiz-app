@@ -1,3 +1,5 @@
+import { readJsonResponse } from './response'
+
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
 function getToken() {
@@ -7,12 +9,17 @@ function getToken() {
 async function post<T>(path: string, body?: unknown, auth = false): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (auth) headers['Authorization'] = `Bearer ${getToken()}`
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  const data = await res.json()
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    throw new Error('Unable to reach the server. Please check your connection and try again.')
+  }
+  const data = await readJsonResponse<T & { error?: string }>(res)
   if (!res.ok) throw new Error(data?.error ?? `Request failed: ${res.status}`)
   return data as T
 }
@@ -20,18 +27,28 @@ async function post<T>(path: string, body?: unknown, auth = false): Promise<T> {
 async function get<T>(path: string, auth = false): Promise<T> {
   const headers: Record<string, string> = {}
   if (auth) headers['Authorization'] = `Bearer ${getToken()}`
-  const res = await fetch(`${BASE}${path}`, { headers })
-  const data = await res.json()
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, { headers })
+  } catch {
+    throw new Error('Unable to reach the server. Please check your connection and try again.')
+  }
+  const data = await readJsonResponse<T & { error?: string }>(res)
   if (!res.ok) throw new Error(data?.error ?? `Request failed: ${res.status}`)
   return data as T
 }
 
 async function del<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${getToken()}` },
-  })
-  const data = await res.json()
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+  } catch {
+    throw new Error('Unable to reach the server. Please check your connection and try again.')
+  }
+  const data = await readJsonResponse<T & { error?: string }>(res)
   if (!res.ok) throw new Error(data?.error ?? `Request failed: ${res.status}`)
   return data as T
 }
