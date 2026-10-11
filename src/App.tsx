@@ -100,21 +100,54 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
 
 // ─── Live data hook ───────────────────────────────────────────────────────────
 
-function useLiveData() {
+function useLiveData(authToken: string | null) {
   const [transactions, setTransactions] = useState<ApiTx[]>([])
   const [summary, setSummary] = useState<Summary>({
     total_in: 0, total_business_lock: 0, total_savings: 0, total_flexible: 0, tx_count: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([mpesa.getTransactions(), mpesa.getSummary()])
-      .then(([txs, sum]) => { setTransactions(txs); setSummary(sum) })
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [])
+    let active = true
 
-  return { transactions, summary, loading }
+    setTransactions([])
+    setSummary({
+      total_in: 0, total_business_lock: 0, total_savings: 0, total_flexible: 0, tx_count: 0,
+    })
+
+    if (!authToken) {
+      setTransactions([])
+      setSummary({
+        total_in: 0, total_business_lock: 0, total_savings: 0, total_flexible: 0, tx_count: 0,
+      })
+      setError(null)
+      setLoading(false)
+      return () => { active = false }
+    }
+
+    setLoading(true)
+    setError(null)
+
+    Promise.all([mpesa.getTransactions(), mpesa.getSummary()])
+      .then(([txs, sum]) => {
+        if (!active) return
+        setTransactions(txs)
+        setSummary(sum)
+      })
+      .catch((err: unknown) => {
+        if (!active) return
+        console.error(err)
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => { active = false }
+  }, [authToken])
+
+  return { transactions, summary, loading, error }
 }
 
 // ─── Credit Score Formula ─────────────────────────────────────────────────────
@@ -1546,7 +1579,7 @@ export default function App() {
     }
   }, [user])
 
-  const { transactions, summary, loading } = useLiveData()
+  const { transactions, summary, loading, error } = useLiveData(user?.token ?? null)
   const [userChannels, setUserChannels] = useState<Channel[]>([])
   useEffect(() => {
     if (user) channels.list().then(setUserChannels).catch(() => {})
@@ -1648,9 +1681,15 @@ export default function App() {
 
         {/* Page content */}
         <div className="flex-1 px-4 pt-4 pb-8">
-          {loading ? (
+          {tab === 'dashboard' && loading ? (
             <div className="flex items-center justify-center h-40">
               <p className="text-sm text-[#718096]">Loading...</p>
+            </div>
+          ) : tab === 'dashboard' && error ? (
+            <div className="flex items-center justify-center h-40">
+              <p className="text-sm text-red-600">
+                Unable to load dashboard data: {error}
+              </p>
             </div>
           ) : (
             <>
