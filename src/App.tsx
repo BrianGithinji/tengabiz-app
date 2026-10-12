@@ -1712,20 +1712,6 @@ export default function App() {
     <div className={`min-h-screen ${bg} transition-colors`}>
       <main className="max-w-lg mx-auto flex flex-col min-h-screen relative">
 
-        <nav className="sticky top-0 z-20 flex items-center justify-between bg-white/95 backdrop-blur px-4 py-3 border-b border-[#e2e8f0]">
-          <div className="flex items-center gap-2">
-            <button onClick={() => navigate('dashboard')}
-              className={`px-3 py-2 rounded-lg text-sm font-semibold ${tab === 'dashboard' ? 'bg-[#f0faf4] text-[#1a6b3c]' : 'text-[#4a5568]'}`}>
-              Dashboard
-            </button>
-            <button onClick={() => navigate('settings')}
-              className={`px-3 py-2 rounded-lg text-sm font-semibold ${tab === 'settings' ? 'bg-[#f0faf4] text-[#1a6b3c]' : 'text-[#4a5568]'}`}>
-              Profile
-            </button>
-          </div>
-          <button onClick={handleLogout} className="text-xs text-red-500 font-semibold hover:text-red-700">Sign out</button>
-        </nav>
-
         {/* ── Side drawer scrim ── */}
         {drawerOpen && (
           <div className="fixed inset-0 bg-black/50 z-30" onClick={() => setDrawerOpen(false)} />
