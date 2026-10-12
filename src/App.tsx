@@ -107,14 +107,17 @@ function useLiveData() {
   })
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    Promise.all([mpesa.getTransactions(), mpesa.getSummary()])
+  async function refresh() {
+    return Promise.all([mpesa.getTransactions(), mpesa.getSummary()])
       .then(([txs, sum]) => { setTransactions(txs); setSummary(sum) })
       .catch(console.error)
-      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    refresh().finally(() => setLoading(false))
   }, [])
 
-  return { transactions, summary, loading }
+  return { transactions, summary, loading, refresh }
 }
 
 // ─── Credit Score Formula ─────────────────────────────────────────────────────
@@ -236,12 +239,18 @@ const CHANNEL_COLORS: Record<string, string> = {
   mpesa: 'bg-green-100 text-green-800',
   paybill: 'bg-blue-100 text-blue-800',
   pochi: 'bg-amber-100 text-amber-800',
+  sim: 'bg-purple-100 text-purple-800',
+  stk_push: 'bg-teal-100 text-teal-800',
+  c2b: 'bg-green-100 text-green-800',
 }
 
 const CHANNEL_LABELS: Record<string, string> = {
   mpesa: 'M-PESA Till',
   paybill: 'PayBill',
   pochi: 'Pochi la Biashara',
+  sim: '⚡ Simulated',
+  stk_push: 'STK Push',
+  c2b: 'C2B Till',
 }
 
 // ─── Components ──────────────────────────────────────────────────────────────
@@ -480,8 +489,8 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
 
 function Badge({ channel }: { channel: string }) {
   return (
-    <span className={`text-[10px] font-mono-data font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${CHANNEL_COLORS[channel]}`}>
-      {CHANNEL_LABELS[channel]}
+    <span className={`text-[10px] font-mono-data font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${CHANNEL_COLORS[channel] ?? 'bg-gray-100 text-gray-600'}`}>
+      {CHANNEL_LABELS[channel] ?? channel}
     </span>
   )
 }
@@ -492,8 +501,8 @@ function fmt2(n: number) {
 
 type DashView = 'main' | 'available' | 'lock' | 'savings'
 
-function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen }: {
-  transactions: ApiTx[], summary: Summary, ownerName: string, userChannels: Channel[], onMenuOpen: () => void
+function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen, onSimSuccess }: {
+  transactions: ApiTx[], summary: Summary, ownerName: string, userChannels: Channel[], onMenuOpen: () => void, onSimSuccess: () => Promise<void>
 }) {
   const totalBalance = Number(summary.total_in) || 0
   const businessLock = Number(summary.total_business_lock) || 0
@@ -516,7 +525,10 @@ function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen 
     try {
       const res = await fetch('/api/internal-payment/trigger-confirmation', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('tengabiz_token')}`,
+        },
         body: JSON.stringify({
           TransID: `SIM${Date.now().toString(36).toUpperCase().slice(-7)}`,
           TransAmount: String(Number(simAmount) || 2500),
@@ -524,7 +536,13 @@ function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen 
         }),
       })
       const data = await res.json()
-      if (data.split) setSimResult(data.split)
+      if (data.split) {
+        setSimResult(data.split)
+        // Refresh dashboard data so balances and transaction list update immediately
+        await onSimSuccess()
+        // Auto-close sheet after showing result
+        setTimeout(() => setSimOpen(false), 2000)
+      }
     } catch (err) { console.error('[Sim]', err) }
     finally { setSimLoading(false) }
   }
@@ -1546,7 +1564,7 @@ export default function App() {
     }
   }, [user])
 
-  const { transactions, summary, loading } = useLiveData()
+  const { transactions, summary, loading, refresh } = useLiveData()
   const [userChannels, setUserChannels] = useState<Channel[]>([])
   useEffect(() => {
     if (user) channels.list().then(setUserChannels).catch(() => {})
@@ -1654,7 +1672,7 @@ export default function App() {
             </div>
           ) : (
             <>
-              {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} onMenuOpen={() => setDrawerOpen(true)} />}
+              {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} onMenuOpen={() => setDrawerOpen(true)} onSimSuccess={refresh} />}
               {tab === 'loans'     && <BusinessHub businessName={user.businessName} ownerName={user.ownerName} />}
               {tab === 'settings'  && <Settings user={user} onLogout={handleLogout} />}
               {tab === 'about'     && <AboutView />}

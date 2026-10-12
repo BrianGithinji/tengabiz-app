@@ -16,7 +16,7 @@ try {
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT,
-      pin_hash TEXT NOT NULL DEFAULT '',
+      pin_hash TEXT,
       business_name TEXT NOT NULL,
       owner_name TEXT NOT NULL,
       phone TEXT UNIQUE,
@@ -80,6 +80,16 @@ try {
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS flexible_funds NUMERIC;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS allocated INTEGER NOT NULL DEFAULT 1;
   `).catch((e: any) => console.warn('[db] Migration warning:', e.message))
+
+  // Fix legacy schema: old deployments had password_hash NOT NULL; drop the constraint
+  await pool.query(`
+    ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+  `).catch(() => {/* column may not exist on fresh DBs — safe to ignore */})
+
+  // Also ensure pin_hash allows nulls during registration (set via UPDATE after insert if needed)
+  await pool.query(`
+    ALTER TABLE users ALTER COLUMN pin_hash DROP NOT NULL;
+  `).catch(() => {})
   console.log('[db] Tables ready')
 } catch (err: any) {
   console.error('[db] Failed to initialize tables:', err.message)
