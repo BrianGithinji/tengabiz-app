@@ -546,13 +546,8 @@ function fmt2(n: number) {
 
 type DashView = 'main' | 'available' | 'lock' | 'savings'
 
-<<<<<<< HEAD
-function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen, onSimSuccess }: {
-  transactions: ApiTx[], summary: Summary, ownerName: string, userChannels: Channel[], onMenuOpen: () => void, onSimSuccess: () => Promise<void>
-=======
 function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen, refresh }: {
   transactions: ApiTx[], summary: Summary, ownerName: string, userChannels: Channel[], onMenuOpen: () => void, refresh: () => Promise<void>
->>>>>>> e729e3b79530da1245b2b2c9f6b7c5f1be9cfb39
 }) {
   const totalBalance = Number(summary.total_in) || 0
   const businessLock = Number(summary.total_business_lock) || 0
@@ -577,11 +572,7 @@ function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-<<<<<<< HEAD
-          'Authorization': `Bearer ${localStorage.getItem('tengabiz_token')}`,
-=======
           Authorization: `Bearer ${localStorage.getItem('tengabiz_token') ?? ''}`,
->>>>>>> e729e3b79530da1245b2b2c9f6b7c5f1be9cfb39
         },
         body: JSON.stringify({
           TransID: `SIM${Date.now().toString(36).toUpperCase().slice(-7)}`,
@@ -590,19 +581,12 @@ function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen,
         }),
       })
       const data = await res.json()
-<<<<<<< HEAD
+      if (!res.ok) throw new Error(data?.error ?? `Simulation failed: ${res.status}`)
       if (data.split) {
         setSimResult(data.split)
-        // Refresh dashboard data so balances and transaction list update immediately
-        await onSimSuccess()
-        // Auto-close sheet after showing result
+        await refresh()
         setTimeout(() => setSimOpen(false), 2000)
       }
-=======
-      if (!res.ok) throw new Error(data?.error ?? `Simulation failed: ${res.status}`)
-      if (data.split) setSimResult(data.split)
-      await refresh()
->>>>>>> e729e3b79530da1245b2b2c9f6b7c5f1be9cfb39
     } catch (err) { console.error('[Sim]', err) }
     finally { setSimLoading(false) }
   }
@@ -1624,11 +1608,7 @@ export default function App() {
     }
   }, [user])
 
-<<<<<<< HEAD
-  const { transactions, summary, loading, refresh } = useLiveData()
-=======
   const { transactions, summary, loading, error, refresh } = useLiveData(user?.token ?? null)
->>>>>>> e729e3b79530da1245b2b2c9f6b7c5f1be9cfb39
   const [userChannels, setUserChannels] = useState<Channel[]>([])
   useEffect(() => {
     if (user) channels.list().then(setUserChannels).catch(() => {})
@@ -1742,11 +1722,7 @@ export default function App() {
             </div>
           ) : (
             <>
-<<<<<<< HEAD
-              {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} onMenuOpen={() => setDrawerOpen(true)} onSimSuccess={refresh} />}
-=======
               {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} onMenuOpen={() => setDrawerOpen(true)} refresh={refresh} />}
->>>>>>> e729e3b79530da1245b2b2c9f6b7c5f1be9cfb39
               {tab === 'loans'     && <BusinessHub businessName={user.businessName} ownerName={user.ownerName} />}
               {tab === 'settings'  && <Settings user={user} onLogout={handleLogout} />}
               {tab === 'about'     && <AboutView />}
