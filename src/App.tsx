@@ -25,6 +25,8 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
   const [form, setForm] = useState({ businessName: user.businessName === user.ownerName ? '' : user.businessName, type: 'till' as 'till' | 'paybill' | 'pochi', identifier: '', label: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [certificateUploading, setCertificateUploading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setError(''); setLoading(true)
@@ -42,6 +44,25 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
       onDone(form.businessName.trim() || user.businessName)
     } catch (err: any) { setError(err.message) }
     finally { setLoading(false) }
+  }
+
+  async function upload(file: File, endpoint: string, field: string, setUploading: (value: boolean) => void) {
+    setUploading(true); setError('')
+    try {
+      const body = new FormData()
+      body.append(field, file)
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('tengabiz_token') ?? ''}` },
+        body,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Upload failed')
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
@@ -64,6 +85,20 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
                 placeholder="e.g. Mama Njeri's Shop"
                 onChange={e => setForm(f => ({ ...f, businessName: e.target.value }))}
                 className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="cursor-pointer text-center border-2 border-dashed border-[#e2e8f0] rounded-xl px-3 py-3 text-xs font-semibold text-[#4a5568] hover:border-[#1a6b3c]">
+                {photoUploading ? 'Uploading...' : 'Add logo (optional)'}
+                <input type="file" accept="image/*" className="hidden"
+                  onChange={e => { const file = e.target.files?.[0]; if (file) upload(file, '/api/auth/upload-photo', 'photo', setPhotoUploading) }}
+                  disabled={photoUploading} />
+              </label>
+              <label className="cursor-pointer text-center border-2 border-dashed border-[#e2e8f0] rounded-xl px-3 py-3 text-xs font-semibold text-[#4a5568] hover:border-[#1a6b3c]">
+                {certificateUploading ? 'Uploading...' : 'Add certificate (optional)'}
+                <input type="file" accept="image/*,.pdf" className="hidden"
+                  onChange={e => { const file = e.target.files?.[0]; if (file) upload(file, '/api/auth/upload-cert', 'cert', setCertificateUploading) }}
+                  disabled={certificateUploading} />
+              </label>
             </div>
             <div>
               <label className="text-xs font-semibold text-[#4a5568] block mb-1">Payment Channel Type</label>
