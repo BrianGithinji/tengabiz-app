@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: tengabiz
+    runtime: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_STK_SHORTCODE
+        sync: false
+      - key: MPESA_PASSKEY
+        sync: false
+      - key: MPESA_ENV
+        value: sandbox
+      - key: MPESA_C2B_TYPE
+        value: CustomerPayBillOnline
+      - key: CALLBACK_BASE_URL
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
