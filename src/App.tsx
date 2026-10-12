@@ -18,7 +18,7 @@ interface SessionUser {
   token: string
 }
 
-// ─── Setup Channel Screen (shown once after Google OAuth) ─────────────────────
+// ─── Setup Channel Screen (shown once after registration) ────────────────────
 
 function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessName: string) => void }) {
   const [form, setForm] = useState({ businessName: user.businessName === user.ownerName ? '' : user.businessName, type: 'till' as 'till' | 'paybill' | 'pochi', identifier: '', label: '' })
@@ -90,6 +90,10 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
             <button type="submit" disabled={loading}
               className="w-full py-3 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22] disabled:opacity-60">
               {loading ? 'Saving...' : 'Save & Go to Dashboard'}
+            </button>
+            <button type="button" onClick={() => onDone(form.businessName.trim() || user.businessName)}
+              className="w-full py-2.5 text-[#718096] text-sm font-medium hover:text-[#4a5568]">
+              Skip for now
             </button>
           </form>
         </div>
@@ -1617,7 +1621,11 @@ export default function App() {
   function handleAuthSuccess(u: SessionUser, isNew = false) {
     localStorage.setItem('tengabiz_business', u.businessName)
     localStorage.setItem('tengabiz_owner', u.ownerName)
-    if (isNew) { localStorage.setItem('tengabiz_new', '1'); setTab('settings') }
+    if (isNew) {
+      localStorage.setItem('tengabiz_new', '1')
+      localStorage.setItem('tengabiz_setup', '1')
+      setScreen('setup')
+    }
     setUser(u)
   }
 

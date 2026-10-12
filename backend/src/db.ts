@@ -94,9 +94,10 @@ try {
     ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
   `).catch(() => {/* column may not exist on fresh DBs — safe to ignore */})
 
-  // Also ensure pin_hash allows nulls during registration (set via UPDATE after insert if needed)
+  // Ensure email and pin_hash allow nulls
   await pool.query(`
     ALTER TABLE users ALTER COLUMN pin_hash DROP NOT NULL;
+    ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
   `).catch(() => {})
   console.log('[db] Tables ready')
 } catch (err: any) {
