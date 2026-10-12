@@ -29,10 +29,24 @@ function password(ts: string): string {
   return Buffer.from(`${shortcode}${passkey}${ts}`).toString('base64')
 }
 
+function normalisePhone(phone: string): string {
+  const cleaned = phone.replace(/[\s+]/g, '')
+  const normalised = cleaned.startsWith('07') || cleaned.startsWith('01')
+    ? `254${cleaned.slice(1)}`
+    : cleaned
+
+  if (!/^\d{12}$/.test(normalised)) {
+    throw new Error('Phone number must be 12 digits in 254XXXXXXXXX format')
+  }
+
+  return normalised
+}
+
 export async function stkPush(params: StkPushParams): Promise<StkPushResult> {
   const token = await getAccessToken()
   const ts = timestamp()
   const callbackUrl = `${process.env.CALLBACK_BASE_URL}/api/payments/stk-callback`
+  const phone = normalisePhone(params.phone)
 
   const payload = {
     BusinessShortCode: process.env.MPESA_STK_SHORTCODE,
@@ -40,9 +54,9 @@ export async function stkPush(params: StkPushParams): Promise<StkPushResult> {
     Timestamp: ts,
     TransactionType: process.env.MPESA_C2B_TYPE ?? 'CustomerBuyGoodsOnline',
     Amount: Math.round(params.amount),
-    PartyA: params.phone,
+    PartyA: phone,
     PartyB: process.env.MPESA_STK_SHORTCODE,
-    PhoneNumber: params.phone,
+    PhoneNumber: phone,
     CallBackURL: callbackUrl,
     AccountReference: params.accountRef.slice(0, 12),
     TransactionDesc: params.description.slice(0, 13),

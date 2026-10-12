@@ -64,6 +64,11 @@ try {
   `)
   // Migrations — add columns that may be missing from older table versions
   await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS business_name TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_name TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS location TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS business_photo TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS description TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
@@ -71,6 +76,9 @@ try {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS reg_cert_url TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS business_type TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_hash TEXT;
+    UPDATE users SET pin_hash = '' WHERE pin_hash IS NULL;
+    ALTER TABLE users ALTER COLUMN pin_hash SET DEFAULT '';
+    ALTER TABLE users ALTER COLUMN pin_hash SET NOT NULL;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'in';
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS account_ref TEXT;

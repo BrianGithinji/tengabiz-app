@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 import multer from 'multer'
 import pool from '../db.js'
 import { requireAuth, type AuthRequest } from '../middleware/auth.js'
+import { validate } from '../middleware/validate.js'
 import { z } from 'zod'
 import passport from '../passport.js'
 
@@ -31,7 +32,7 @@ const registerSchema = z.object({
   lastName: z.string().min(1),
   phone: z.string().min(9),
   email: z.string().email().optional().or(z.literal('')),
-  pin: z.string().length(4).regex(/^\d+$/),
+  pin: z.string().regex(/^\d{4}$/, 'PIN must be exactly 4 digits'),
   businessName: z.string().min(1),
   ownerName: z.string().min(1),
   businessType: z.string().optional(),
@@ -51,29 +52,29 @@ function signToken(userId: string) {
 }
 
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
-  const result = registerSchema.safeParse(req.body)
-  if (!result.success) {
-    res.status(400).json({ error: 'Validation failed', details: result.error.flatten() })
-    return
+router.post('/register', validate(registerSchema), async (req, res) => {
+  try {
+    const { firstName, lastName, phone, email, pin, businessName, ownerName, businessType, location, description, lat, lng } = req.body
+
+    const existing = await pool.query('SELECT id FROM users WHERE phone = $1', [phone])
+    if (existing.rows.length > 0) { res.status(409).json({ error: 'Phone number already registered' }); return }
+
+    const pinHash = await bcrypt.hash(pin, 10)
+    const id = randomUUID()
+    const fullName = `${firstName} ${lastName}`.trim()
+
+    await pool.query(
+      `INSERT INTO users (id, email, pin_hash, business_name, owner_name, phone, business_type, location, description, lat, lng)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [id, email || null, pinHash, businessName, fullName, phone, businessType ?? null, location ?? null, description ?? null, lat ?? null, lng ?? null]
+    )
+
+    res.status(201).json({ token: signToken(id), userId: id, businessName, ownerName: fullName })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[auth/register] Failed:', message)
+    res.status(500).json({ error: 'Unable to create your account. Please try again.' })
   }
-
-  const { firstName, lastName, phone, email, pin, businessName, ownerName, businessType, location, description, lat, lng } = result.data
-
-  const existing = await pool.query('SELECT id FROM users WHERE phone = $1', [phone])
-  if (existing.rows.length > 0) { res.status(409).json({ error: 'Phone number already registered' }); return }
-
-  const pinHash = await bcrypt.hash(pin, 10)
-  const id = randomUUID()
-  const fullName = `${firstName} ${lastName}`.trim()
-
-  await pool.query(
-    `INSERT INTO users (id, email, pin_hash, business_name, owner_name, phone, business_type, location, description, lat, lng)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-    [id, email || null, pinHash, businessName, fullName, phone, businessType ?? null, location ?? null, description ?? null, lat ?? null, lng ?? null]
-  )
-
-  res.status(201).json({ token: signToken(id), userId: id, businessName, ownerName: fullName })
 })
 
 // POST /api/auth/login
