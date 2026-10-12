@@ -59,6 +59,11 @@ router.post('/register', validate(registerSchema), async (req, res) => {
     const existing = await pool.query('SELECT id FROM users WHERE phone = $1', [phone])
     if (existing.rows.length > 0) { res.status(409).json({ error: 'Phone number already registered' }); return }
 
+    if (email) {
+      const emailExists = await pool.query('SELECT id FROM users WHERE email = $1', [email])
+      if (emailExists.rows.length > 0) { res.status(409).json({ error: 'Email already registered' }); return }
+    }
+
     const pinHash = await bcrypt.hash(pin, 10)
     const id = randomUUID()
     const fullName = `${firstName} ${lastName}`.trim()
@@ -73,6 +78,11 @@ router.post('/register', validate(registerSchema), async (req, res) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[auth/register] Failed:', message)
+    // Handle any remaining unique constraint violations gracefully
+    if (message.includes('duplicate key') || message.includes('unique constraint')) {
+      res.status(409).json({ error: 'An account with this phone or email already exists' })
+      return
+    }
     res.status(500).json({ error: 'Unable to create your account. Please try again.' })
   }
 })
