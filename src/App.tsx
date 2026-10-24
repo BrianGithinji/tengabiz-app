@@ -39,7 +39,14 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
         })
       }
       if (form.identifier.trim()) {
-        await channels.add({ type: form.type, identifier: form.identifier.trim(), label: form.label || undefined })
+        let identifier = form.identifier.trim()
+        if (form.type === 'pochi') {
+          const digits = identifier.replace(/\D/g, '')
+          if (digits.startsWith('0')) identifier = `254${digits.slice(1)}`
+          else if (digits.startsWith('7') || digits.startsWith('1')) identifier = `254${digits}`
+          else identifier = digits
+        }
+        await channels.add({ type: form.type, identifier, label: form.label || undefined })
       }
       onDone(form.businessName.trim() || user.businessName)
     } catch (err: any) { setError(err.message) }
@@ -201,7 +208,9 @@ function useLiveData(authToken: string | null) {
         if (active) setLoading(false)
       })
 
-    return () => { active = false }
+    const interval = setInterval(() => { if (active) refresh() }, 30000)
+
+    return () => { active = false; clearInterval(interval) }
   }, [authToken])
 
   return { transactions, summary, loading, error, refresh }
@@ -620,6 +629,7 @@ function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen,
   const [simAmount, setSimAmount] = useState('2500')
   const [simLoading, setSimLoading] = useState(false)
   const [simResult, setSimResult] = useState<{ businessLock: number; savings: number; available: number } | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   async function runSimulation() {
     setSimLoading(true); setSimResult(null)
@@ -819,7 +829,25 @@ function Dashboard({ transactions, summary, ownerName, userChannels, onMenuOpen,
 
       {/* ── Transactions feed ── */}
       <div>
-        <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest mb-2 px-1">Transactions</p>
+        <div className="flex items-center justify-between mb-2 px-1">
+          <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest">Transactions</p>
+          <button
+            onClick={async () => { setIsRefreshing(true); await refresh(); setIsRefreshing(false) }}
+            disabled={isRefreshing}
+            className="text-[#94a3b8] hover:text-[#1a6b3c] transition-colors disabled:opacity-50"
+            title="Refresh transactions"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className={isRefreshing ? 'animate-spin' : ''}
+            >
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
+        </div>
         <div className="bg-white rounded-2xl border border-[#e2e8f0] overflow-hidden">
           {transactions.length === 0 ? (
             <div className="px-5 py-8 flex flex-col items-center gap-2">
@@ -1198,6 +1226,8 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
   const [certUploading, setCertUploading] = useState(false)
   const [profileInfo, setProfileInfo] = useState({ phone: '', businessType: '', description: '', location: '', lat: null as number | null, lng: null as number | null })
   const isNewUser = localStorage.getItem('tengabiz_new') === '1'
+  const [registeringC2B, setRegisteringC2B] = useState(false)
+  const [c2bMsg, setC2bMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   useEffect(() => {
     channels.list().then(setUserChannels).catch(console.error)
@@ -1255,7 +1285,14 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault(); setError('')
     try {
-      const ch = await channels.add(form)
+      let identifier = form.identifier.trim()
+      if (form.type === 'pochi') {
+        const digits = identifier.replace(/\D/g, '')
+        if (digits.startsWith('0')) identifier = `254${digits.slice(1)}`
+        else if (digits.startsWith('7') || digits.startsWith('1')) identifier = `254${digits}`
+        else identifier = digits
+      }
+      const ch = await channels.add({ ...form, identifier })
       setUserChannels(c => [...c, ch])
       setForm({ type: 'till', identifier: '', label: '' })
       setAdding(false)
@@ -1266,6 +1303,23 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
   async function handleRemove(id: string) {
     await channels.remove(id)
     setUserChannels(c => c.filter(ch => ch.id !== id))
+  }
+
+  async function handleRegisterC2B() {
+    setRegisteringC2B(true); setC2bMsg(null)
+    try {
+      const res = await fetch('/api/mpesa/register-c2b', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${user.token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error ?? 'Registration failed')
+      setC2bMsg({ ok: true, text: 'M-PESA callbacks registered successfully.' })
+    } catch (err: any) {
+      setC2bMsg({ ok: false, text: err.message ?? 'Registration failed' })
+    } finally {
+      setRegisteringC2B(false)
+    }
   }
 
   const CHANNEL_TYPE_LABELS = { till: 'M-PESA Till', paybill: 'PayBill', pochi: 'Pochi la Biashara' }
@@ -1358,6 +1412,22 @@ function Settings({ user, onLogout }: { user: SessionUser; onLogout: () => void 
           <button onClick={() => setAdding(a => !a)}
             className="text-xs font-semibold text-[#1a6b3c] hover:underline">
             {adding ? 'Cancel' : '+ Add channel'}
+          </button>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
+          <p className="text-xs text-[#718096] mb-2">Sync M-PESA Callbacks — Run once after adding a new channel.</p>
+          {c2bMsg && (
+            <p className={`text-xs px-3 py-2 rounded-lg mb-2 ${c2bMsg.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+              {c2bMsg.text}
+            </p>
+          )}
+          <button
+            onClick={handleRegisterC2B}
+            disabled={registeringC2B}
+            className="w-full py-2.5 border border-[#1a6b3c] text-[#1a6b3c] rounded-xl font-semibold text-sm hover:bg-[#f0faf4] disabled:opacity-60 transition-colors"
+          >
+            {registeringC2B ? 'Registering...' : '🔄 Sync M-PESA Callbacks'}
           </button>
         </div>
 
@@ -1671,12 +1741,6 @@ export default function App() {
   function handleAuthSuccess(u: SessionUser, isNew = false) {
     localStorage.setItem('tengabiz_business', u.businessName)
     localStorage.setItem('tengabiz_owner', u.ownerName)
-<<<<<<< HEAD
-    if (isNew) {
-      localStorage.setItem('tengabiz_new', '1')
-      localStorage.setItem('tengabiz_setup', '1')
-      setScreen('setup')
-=======
     localStorage.removeItem('tengabiz_setup')
     setAuthMessage('')
     if (isNew) {
@@ -1686,7 +1750,6 @@ export default function App() {
       localStorage.removeItem('tengabiz_new')
       setTab('dashboard')
       setScreen('app')
->>>>>>> b526562f082c7746a98db85fd5a21d52d9a0ce1c
     }
     setUser(u)
   }

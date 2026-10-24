@@ -88,7 +88,7 @@ export function handleC2BValidation(req: Request, res: Response) {
 
 // ── C2B Confirmation ──────────────────────────────────────────────────────────
 export async function handleC2BConfirmation(req: Request, res: Response) {
-  const { TransID, TransAmount, MSISDN, BillRefNumber, TransTime, BusinessShortCode } = req.body
+  const { TransID, TransAmount, MSISDN, BillRefNumber, TransTime, BusinessShortCode, TransactionType } = req.body
   const amount = Number(TransAmount)
   const { businessLock, savingsGrowth, flexibleFunds } = allocate(amount)
 
@@ -99,7 +99,7 @@ export async function handleC2BConfirmation(req: Request, res: Response) {
   await insertTx({
     id: randomUUID(), user_id: userId, mpesa_receipt: TransID,
     phone: normalisePhone(String(MSISDN)), amount,
-    channel: BusinessShortCode ? 'paybill' : 'pochi', type: 'in',
+    channel: TransactionType === 'Buy Goods' ? 'till' : BusinessShortCode ? 'paybill' : 'pochi', type: 'in',
     account_ref: BillRefNumber ?? null, transaction_date: String(TransTime),
     business_lock: businessLock, savings_growth: savingsGrowth,
     flexible_funds: flexibleFunds, allocated: 1,
