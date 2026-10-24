@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react'
 import type { LoanScore } from './loanReadinessEngine'
 import { fmt2 } from './utils'
 
@@ -10,7 +11,54 @@ interface Props {
 
 export default function LoanReportModal({ score, businessName, ownerName, onClose }: Props) {
   const today = new Date().toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' })
-  const refNo = `TBZ-${Date.now().toString(36).toUpperCase().slice(-8)}`
+  const refNo = useRef(`TBZ-${Date.now().toString(36).toUpperCase().slice(-8)}`).current
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState('')
+
+  const downloadPdf = async () => {
+    const certificate = document.getElementById('loan-certificate')
+    if (!certificate) {
+      setDownloadError('Could not find the certificate to download. Please try again.')
+      return
+    }
+
+    setDownloading(true)
+    setDownloadError('')
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ])
+      await document.fonts.ready
+      const canvas = await html2canvas(certificate, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true,
+        ignoreElements: element => element.hasAttribute('data-pdf-ignore'),
+      })
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const margin = 10
+      const pageWidth = pdf.internal.pageSize.getWidth() - margin * 2
+      const pageHeight = pdf.internal.pageSize.getHeight() - margin * 2
+      const scale = Math.min(pageWidth / canvas.width, pageHeight / canvas.height)
+      const imageWidth = canvas.width * scale
+      const imageHeight = canvas.height * scale
+      const image = canvas.toDataURL('image/png')
+
+      pdf.addImage(image, 'PNG', (pdf.internal.pageSize.getWidth() - imageWidth) / 2, margin, imageWidth, imageHeight)
+      const filename = businessName
+        .trim()
+        .replace(/[^a-z0-9]+/gi, '-')
+        .replace(/^-|-$/g, '')
+        .toLowerCase() || 'business'
+      pdf.save(`${filename}-loan-assessment-${new Date().toISOString().slice(0, 10)}.pdf`)
+    } catch (error) {
+      console.error('[loan-certificate] PDF download failed:', error)
+      setDownloadError('The PDF could not be generated. Please try again or use Print / Save PDF.')
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <>
@@ -23,9 +71,13 @@ export default function LoanReportModal({ score, businessName, ownerName, onClos
           className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden print:rounded-none print:shadow-none print:max-w-full">
 
           {/* ── Close + Print controls — hidden on print ── */}
-          <div className="flex items-center justify-between px-5 py-3 border-b border-[#e2e8f0] print:hidden">
+          <div data-pdf-ignore className="flex items-center justify-between px-5 py-3 border-b border-[#e2e8f0] print:hidden">
             <p className="text-xs font-bold text-[#94a3b8] uppercase tracking-widest">Loan Assessment Certificate</p>
             <div className="flex items-center gap-2">
+              <button onClick={downloadPdf} disabled={downloading}
+                className="text-xs font-semibold text-[#1a6b3c] border border-[#1a6b3c] hover:bg-[#f0faf4] disabled:opacity-60 px-3 py-1.5 rounded-full transition-colors">
+                {downloading ? 'Preparing PDF...' : '⬇️ Download PDF'}
+              </button>
               <button onClick={() => window.print()}
                 className="text-xs font-semibold text-white bg-[#1a6b3c] hover:bg-[#0f3d22] px-3 py-1.5 rounded-full transition-colors">
                 🖨️ Print / Save PDF
@@ -39,6 +91,11 @@ export default function LoanReportModal({ score, businessName, ownerName, onClos
 
           {/* ── Certificate body ── */}
           <div className="px-6 py-6 space-y-5">
+            {downloadError && (
+              <p role="alert" className="text-xs font-medium text-red-700 bg-red-50 rounded-lg px-3 py-2">
+                {downloadError}
+              </p>
+            )}
 
             {/* Header — logo + title */}
             <div className="flex items-center gap-3">
