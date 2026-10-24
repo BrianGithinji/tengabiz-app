@@ -262,10 +262,12 @@ function getGreeting(ownerName: string) {
 
 // ─── Google Maps helpers ──────────────────────────────────────────────────────
 
+const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_KEY
+
 function loadMapsScript(): Promise<void> {
   if ((window as any).google?.maps) return Promise.resolve()
   return new Promise((resolve, reject) => {
-    const key = (window as any).__GMAPS_KEY__
+    const key = googleMapsKey
     if (!key || key === '%VITE_GOOGLE_MAPS_KEY%') { reject(new Error('no_key')); return }
     const s = document.createElement('script')
     s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places`
@@ -316,7 +318,7 @@ function LocationPicker({ value, onChange }: {
 }
 
 function StaticMap({ lat, lng }: { lat: number; lng: number }) {
-  const key = (window as any).__GMAPS_KEY__
+  const key = googleMapsKey
   if (!key || key === '%VITE_GOOGLE_MAPS_KEY%') return null
   const src = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=600x200&markers=color:green%7C${lat},${lng}&key=${key}`
   return <img src={src} alt="Business location" className="w-full rounded-xl mt-3 object-cover" style={{ height: 160 }} />
@@ -1722,20 +1724,6 @@ export default function App() {
   return (
     <div className={`min-h-screen ${bg} transition-colors`}>
       <main className="max-w-lg mx-auto flex flex-col min-h-screen relative">
-
-        <nav className="sticky top-0 z-20 flex items-center justify-between bg-white/95 backdrop-blur px-4 py-3 border-b border-[#e2e8f0]">
-          <div className="flex items-center gap-2">
-            <button onClick={() => navigate('dashboard')}
-              className={`px-3 py-2 rounded-lg text-sm font-semibold ${tab === 'dashboard' ? 'bg-[#f0faf4] text-[#1a6b3c]' : 'text-[#4a5568]'}`}>
-              Dashboard
-            </button>
-            <button onClick={() => navigate('settings')}
-              className={`px-3 py-2 rounded-lg text-sm font-semibold ${tab === 'settings' ? 'bg-[#f0faf4] text-[#1a6b3c]' : 'text-[#4a5568]'}`}>
-              Profile
-            </button>
-          </div>
-          <button onClick={handleLogout} className="text-xs text-red-500 font-semibold hover:text-red-700">Sign out</button>
-        </nav>
 
         {/* ── Side drawer scrim ── */}
         {drawerOpen && (
