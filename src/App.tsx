@@ -16,6 +16,7 @@ interface SessionUser {
   businessName: string
   ownerName: string
   token: string
+  phone?: string
 }
 
 // ─── Setup Channel Screen (shown once after registration) ────────────────────
@@ -24,6 +25,8 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
   const [form, setForm] = useState({ businessName: user.businessName === user.ownerName ? '' : user.businessName, type: 'till' as 'till' | 'paybill' | 'pochi', identifier: '', label: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [certificateUploading, setCertificateUploading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setError(''); setLoading(true)
@@ -35,10 +38,31 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
           body: JSON.stringify({ businessName: form.businessName.trim() }),
         })
       }
-      await channels.add({ type: form.type, identifier: form.identifier, label: form.label || undefined })
+      if (form.identifier.trim()) {
+        await channels.add({ type: form.type, identifier: form.identifier.trim(), label: form.label || undefined })
+      }
       onDone(form.businessName.trim() || user.businessName)
     } catch (err: any) { setError(err.message) }
     finally { setLoading(false) }
+  }
+
+  async function upload(file: File, endpoint: string, field: string, setUploading: (value: boolean) => void) {
+    setUploading(true); setError('')
+    try {
+      const body = new FormData()
+      body.append(field, file)
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('tengabiz_token') ?? ''}` },
+        body,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Upload failed')
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
@@ -62,6 +86,20 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
                 onChange={e => setForm(f => ({ ...f, businessName: e.target.value }))}
                 className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="cursor-pointer text-center border-2 border-dashed border-[#e2e8f0] rounded-xl px-3 py-3 text-xs font-semibold text-[#4a5568] hover:border-[#1a6b3c]">
+                {photoUploading ? 'Uploading...' : 'Add logo (optional)'}
+                <input type="file" accept="image/*" className="hidden"
+                  onChange={e => { const file = e.target.files?.[0]; if (file) upload(file, '/api/auth/upload-photo', 'photo', setPhotoUploading) }}
+                  disabled={photoUploading} />
+              </label>
+              <label className="cursor-pointer text-center border-2 border-dashed border-[#e2e8f0] rounded-xl px-3 py-3 text-xs font-semibold text-[#4a5568] hover:border-[#1a6b3c]">
+                {certificateUploading ? 'Uploading...' : 'Add certificate (optional)'}
+                <input type="file" accept="image/*,.pdf" className="hidden"
+                  onChange={e => { const file = e.target.files?.[0]; if (file) upload(file, '/api/auth/upload-cert', 'cert', setCertificateUploading) }}
+                  disabled={certificateUploading} />
+              </label>
+            </div>
             <div>
               <label className="text-xs font-semibold text-[#4a5568] block mb-1">Payment Channel Type</label>
               <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as any }))}
@@ -75,7 +113,7 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
               <label className="text-xs font-semibold text-[#4a5568] block mb-1">
                 {form.type === 'pochi' ? 'Phone Number' : 'Shortcode / Number'}
               </label>
-              <input required value={form.identifier}
+              <input value={form.identifier}
                 placeholder={form.type === 'pochi' ? '0712345678' : form.type === 'till' ? '174379' : '600984'}
                 onChange={e => setForm(f => ({ ...f, identifier: e.target.value }))}
                 className="w-full border border-[#e2e8f0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a6b3c]" />
@@ -89,7 +127,7 @@ function SetupChannel({ user, onDone }: { user: SessionUser; onDone: (businessNa
             {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             <button type="submit" disabled={loading}
               className="w-full py-3 bg-[#1a6b3c] text-white rounded-xl font-semibold text-sm hover:bg-[#0f3d22] disabled:opacity-60">
-              {loading ? 'Saving...' : 'Save & Go to Dashboard'}
+              {loading ? 'Saving...' : 'Finish Setup'}
             </button>
             <button type="button" onClick={() => onDone(form.businessName.trim() || user.businessName)}
               className="w-full py-2.5 text-[#718096] text-sm font-medium hover:text-[#4a5568]">
@@ -332,7 +370,11 @@ function clearAttempts() {
   localStorage.removeItem(LOCKOUT_KEY)
 }
 
-function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolean) => void }) {
+function AuthPage({ onSuccess, prefillPhone, message }: {
+  onSuccess: (user: SessionUser, isNew?: boolean) => void
+  prefillPhone?: string
+  message?: string
+}) {
   const [screen, setScreen] = useState<AuthScreen>('login')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -358,6 +400,13 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
 
+  useEffect(() => {
+    if (prefillPhone) {
+      setLoginPhone(prefillPhone)
+      setScreen('login')
+    }
+  }, [prefillPhone])
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     if (lockRemaining > 0) return
@@ -366,7 +415,7 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
       const res = await auth.login(loginPhone, loginPin)
       clearAttempts()
       localStorage.setItem('tengabiz_token', res.token)
-      onSuccess({ businessName: res.businessName, ownerName: res.ownerName, token: res.token })
+      onSuccess({ businessName: res.businessName, ownerName: res.ownerName, token: res.token, phone: loginPhone })
     } catch (err: any) {
       const { locked } = recordFailedAttempt()
       if (locked) {
@@ -398,7 +447,7 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
         ownerName: `${reg.firstName} ${reg.lastName}`.trim(),
       })
       localStorage.setItem('tengabiz_token', res.token)
-      onSuccess({ businessName: res.businessName, ownerName: res.ownerName, token: res.token }, true)
+      onSuccess({ businessName: res.businessName, ownerName: res.ownerName, token: res.token, phone: reg.phone }, true)
     } catch (err: any) { setError(err.message) }
     finally { setLoading(false) }
   }
@@ -419,6 +468,7 @@ function AuthPage({ onSuccess }: { onSuccess: (user: SessionUser, isNew?: boolea
           <img src={logo} alt="TENGABIZ" className="h-20 w-auto" />
         </div>
         <div className={bgCard} style={{ maxHeight: 'calc(100vh - 140px)' }}>
+        {message && <p className="text-xs text-green-700 bg-green-50 px-3 py-2 rounded-lg mb-4">{message}</p>}
           {/* Tab switcher */}
           <div className="flex gap-1 mb-6 bg-[#f7f7f7] rounded-xl p-1">
             {(['login', 'register'] as AuthScreen[]).map(s => (
@@ -1558,7 +1608,11 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('dashboard')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
-  const [screen, setScreen] = useState<AppScreen>('app')
+  const [screen, setScreen] = useState<AppScreen>(() =>
+    new URLSearchParams(window.location.search).get('isNew') === '1' ? 'setup' : 'app'
+  )
+  const [authPhone, setAuthPhone] = useState('')
+  const [authMessage, setAuthMessage] = useState('')
   const [user, setUser] = useState<SessionUser | null>(() => {
     const params = new URLSearchParams(window.location.search)
     const urlToken = params.get('token')
@@ -1578,12 +1632,6 @@ export default function App() {
     const owner = localStorage.getItem('tengabiz_owner')
     return token && name && owner ? { token, businessName: name, ownerName: owner } : null
   })
-
-  useEffect(() => {
-    if (user && localStorage.getItem('tengabiz_setup') === '1') {
-      setScreen('setup')
-    }
-  }, [user])
 
   // Idle auto-lock: clear session after 60s in background/idle
   useEffect(() => {
@@ -1621,19 +1669,37 @@ export default function App() {
   function handleAuthSuccess(u: SessionUser, isNew = false) {
     localStorage.setItem('tengabiz_business', u.businessName)
     localStorage.setItem('tengabiz_owner', u.ownerName)
+<<<<<<< HEAD
     if (isNew) {
       localStorage.setItem('tengabiz_new', '1')
       localStorage.setItem('tengabiz_setup', '1')
       setScreen('setup')
+=======
+    localStorage.removeItem('tengabiz_setup')
+    setAuthMessage('')
+    if (isNew) {
+      localStorage.setItem('tengabiz_new', '1')
+      setScreen('setup')
+    } else {
+      localStorage.removeItem('tengabiz_new')
+      setTab('dashboard')
+      setScreen('app')
+>>>>>>> b526562f082c7746a98db85fd5a21d52d9a0ce1c
     }
     setUser(u)
   }
 
   function handleSetupDone(businessName: string) {
+    const phone = user?.phone ?? ''
+    localStorage.removeItem('tengabiz_token')
+    localStorage.removeItem('tengabiz_business')
+    localStorage.removeItem('tengabiz_owner')
+    localStorage.removeItem('tengabiz_new')
     localStorage.removeItem('tengabiz_setup')
-    localStorage.setItem('tengabiz_business', businessName)
-    setUser(u => u ? { ...u, businessName } : u)
+    setUser(null)
     setScreen('app')
+    setAuthPhone(phone)
+    setAuthMessage('Account created. Please sign in with your PIN.')
   }
 
   function handleLogout() {
@@ -1641,11 +1707,13 @@ export default function App() {
     localStorage.removeItem('tengabiz_business')
     localStorage.removeItem('tengabiz_owner')
     setUser(null)
+    setScreen('app')
+    setAuthMessage('')
   }
 
   function navigate(t: Tab) { setTab(t); setDrawerOpen(false) }
 
-  if (!user) return <AuthPage onSuccess={handleAuthSuccess} />
+  if (!user) return <AuthPage onSuccess={handleAuthSuccess} prefillPhone={authPhone} message={authMessage} />
   if (screen === 'setup') return <SetupChannel user={user} onDone={handleSetupDone} />
 
   const bg = darkMode ? 'bg-[#0f1a14]' : 'bg-[#fdf8f0]'
@@ -1654,6 +1722,20 @@ export default function App() {
   return (
     <div className={`min-h-screen ${bg} transition-colors`}>
       <main className="max-w-lg mx-auto flex flex-col min-h-screen relative">
+
+        <nav className="sticky top-0 z-20 flex items-center justify-between bg-white/95 backdrop-blur px-4 py-3 border-b border-[#e2e8f0]">
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigate('dashboard')}
+              className={`px-3 py-2 rounded-lg text-sm font-semibold ${tab === 'dashboard' ? 'bg-[#f0faf4] text-[#1a6b3c]' : 'text-[#4a5568]'}`}>
+              Dashboard
+            </button>
+            <button onClick={() => navigate('settings')}
+              className={`px-3 py-2 rounded-lg text-sm font-semibold ${tab === 'settings' ? 'bg-[#f0faf4] text-[#1a6b3c]' : 'text-[#4a5568]'}`}>
+              Profile
+            </button>
+          </div>
+          <button onClick={handleLogout} className="text-xs text-red-500 font-semibold hover:text-red-700">Sign out</button>
+        </nav>
 
         {/* ── Side drawer scrim ── */}
         {drawerOpen && (
