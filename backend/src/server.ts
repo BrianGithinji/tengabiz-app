@@ -15,6 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT ?? 3000
 const frontendOrigin = (process.env.FRONTEND_ORIGIN ?? 'http://localhost:8443').replace(/\/$/, '')
+if (process.env.RENDER) app.set('trust proxy', 1)
 const requiredConfig = [
   'DATABASE_URL',
   'MPESA_CONSUMER_KEY',

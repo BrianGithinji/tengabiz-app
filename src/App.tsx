@@ -394,6 +394,12 @@ function AuthPage({ onSuccess, prefillPhone, message }: {
   const [loginPhone, setLoginPhone] = useState('')
   const [loginPin, setLoginPin] = useState('')
   const [lockRemaining, setLockRemaining] = useState(getLockoutRemaining)
+  const [forgotStep, setForgotStep] = useState<'request' | 'reset' | null>(null)
+  const [recoveryPhone, setRecoveryPhone] = useState('')
+  const [recoveryCode, setRecoveryCode] = useState('')
+  const [recoveryPin, setRecoveryPin] = useState('')
+  const [recoveryPinConfirm, setRecoveryPinConfirm] = useState('')
+  const [recoveryNotice, setRecoveryNotice] = useState('')
 
   useEffect(() => {
     if (lockRemaining <= 0) return
@@ -439,6 +445,61 @@ function AuthPage({ onSuccess, prefillPhone, message }: {
     } finally { setLoading(false) }
   }
 
+  async function handleRequestPinReset(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setRecoveryNotice('')
+    setLoading(true)
+    try {
+      await auth.requestPinReset(recoveryPhone)
+      setForgotStep('reset')
+      setRecoveryNotice('If an account matches that number, a recovery code will be sent. The code expires in 10 minutes.')
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleResetPin(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    if (!/^\d{6}$/.test(recoveryCode)) { setError('Enter the six-digit code.'); return }
+    if (!/^\d{4}$/.test(recoveryPin)) { setError('Your new PIN must be 4 digits.'); return }
+    if (recoveryPin !== recoveryPinConfirm) { setError('PINs do not match.'); return }
+
+    setLoading(true)
+    try {
+      await auth.resetPin(recoveryPhone, recoveryCode, recoveryPin)
+      setForgotStep(null)
+      setScreen('login')
+      setLoginPhone(recoveryPhone)
+      setLoginPin('')
+      setRecoveryCode('')
+      setRecoveryPin('')
+      setRecoveryPinConfirm('')
+      setRecoveryNotice('PIN reset. Sign in with your new PIN.')
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleResendRecoveryCode() {
+    setError('')
+    setRecoveryNotice('')
+    setLoading(true)
+    try {
+      await auth.requestPinReset(recoveryPhone)
+      setRecoveryNotice('If an account matches that number, a new recovery code will be sent. Previous codes are no longer valid.')
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function handleSendDetails(e: React.FormEvent) {
     e.preventDefault(); setError('')
     setSlide(1)
@@ -479,18 +540,77 @@ function AuthPage({ onSuccess, prefillPhone, message }: {
           <img src={logo} alt="TENGABIZ" className="h-20 w-auto" />
         </div>
         <div className={bgCard} style={{ maxHeight: 'calc(100vh - 140px)' }}>
-        {message && <p className="text-xs text-green-700 bg-green-50 px-3 py-2 rounded-lg mb-4">{message}</p>}
+        {(message || recoveryNotice) && (
+          <p className="text-xs text-green-700 bg-green-50 px-3 py-2 rounded-lg mb-4">{recoveryNotice || message}</p>
+        )}
           {/* Tab switcher */}
           <div className="flex gap-1 mb-6 bg-[#f7f7f7] rounded-xl p-1">
             {(['login', 'register'] as AuthScreen[]).map(s => (
-              <button key={s} onClick={() => { setScreen(s); setError(''); setSlide(0) }}
+              <button key={s} onClick={() => { setScreen(s); setForgotStep(null); setError(''); setRecoveryNotice(''); setSlide(0) }}
                 className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
                   screen === s ? 'bg-white text-[#1c1c1e] shadow-sm' : 'text-[#718096]'
                 }`}>{s === 'login' ? 'Sign In' : 'Register'}</button>
             ))}
           </div>
 
-          {screen === 'login' ? (
+          {forgotStep ? (
+            <form onSubmit={forgotStep === 'request' ? handleRequestPinReset : handleResetPin} className="space-y-4">
+              <button type="button" onClick={() => { setForgotStep(null); setError(''); setRecoveryNotice('') }}
+                className="text-sm font-semibold text-[#1a6b3c] hover:underline">
+                ← Back to Sign In
+              </button>
+              <div>
+                <h2 className="font-display font-bold text-[#1c1c1e]">Forgot your PIN?</h2>
+                <p className="text-xs text-[#718096] mt-1">
+                  {forgotStep === 'request'
+                    ? 'We’ll send a one-time recovery code by SMS to your registered phone.'
+                    : 'Enter the code sent to your phone and choose a new 4-digit PIN.'}
+                </p>
+              </div>
+              <div>
+                <label className={labelCls}>Registered Phone Number</label>
+                <input type="tel" required value={recoveryPhone} placeholder="e.g. 0712345678"
+                  readOnly={forgotStep === 'reset'}
+                  onChange={e => setRecoveryPhone(e.target.value)}
+                  className={`${inputCls} read-only:bg-[#f7f7f7]`} />
+              </div>
+              {forgotStep === 'reset' && (
+                <>
+                  <div>
+                    <label className={labelCls}>6-Digit Recovery Code</label>
+                    <input type="text" inputMode="numeric" autoComplete="one-time-code" required
+                      maxLength={6} value={recoveryCode} placeholder="••••••"
+                      onChange={e => { if (/^\d*$/.test(e.target.value)) setRecoveryCode(e.target.value.slice(0, 6)) }}
+                      className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>New 4-Digit PIN</label>
+                    <input type="password" inputMode="numeric" autoComplete="new-password" required
+                      maxLength={4} value={recoveryPin} placeholder="••••"
+                      onChange={e => { if (/^\d*$/.test(e.target.value)) setRecoveryPin(e.target.value.slice(0, 4)) }}
+                      className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Confirm New PIN</label>
+                    <input type="password" inputMode="numeric" autoComplete="new-password" required
+                      maxLength={4} value={recoveryPinConfirm} placeholder="••••"
+                      onChange={e => { if (/^\d*$/.test(e.target.value)) setRecoveryPinConfirm(e.target.value.slice(0, 4)) }}
+                      className={inputCls} />
+                  </div>
+                </>
+              )}
+              {error && <p role="alert" className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+              <button type="submit" disabled={loading} className={btnPrimary}>
+                {loading ? 'Please wait...' : forgotStep === 'request' ? 'Send Recovery Code' : 'Reset PIN'}
+              </button>
+              {forgotStep === 'reset' && (
+                <button type="button" onClick={handleResendRecoveryCode} disabled={loading}
+                  className="w-full text-sm font-semibold text-[#1a6b3c] disabled:opacity-60">
+                  Resend code
+                </button>
+              )}
+            </form>
+          ) : screen === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label className={labelCls}>Phone Number</label>
@@ -505,6 +625,14 @@ function AuthPage({ onSuccess, prefillPhone, message }: {
                   onChange={e => { if (/^\d*$/.test(e.target.value)) setLoginPin(e.target.value.slice(0, 4)) }}
                   className={inputCls} />
               </div>
+              <button type="button" onClick={() => {
+                setRecoveryPhone(loginPhone)
+                setRecoveryNotice('')
+                setError('')
+                setForgotStep('request')
+              }} className="text-sm font-semibold text-[#1a6b3c] hover:underline">
+                Forgot PIN?
+              </button>
               {lockRemaining > 0 && (
                 <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
                   Account locked. Try again in {lockMins} minute{lockMins !== 1 ? 's' : ''}.

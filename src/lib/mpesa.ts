@@ -143,6 +143,12 @@ export const auth = {
   login: (phone: string, pin: string) =>
     post<AuthResponse>('/api/auth/login', { phone, pin }),
 
+  requestPinReset: (phone: string) =>
+    post<{ message: string }>('/api/auth/forgot-pin', { phone }),
+
+  resetPin: (phone: string, code: string, pin: string) =>
+    post<{ message: string }>('/api/auth/reset-pin', { phone, code, pin }),
+
   me: () => get<User>('/api/auth/me', true),
 }
 

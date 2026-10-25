@@ -17,6 +17,7 @@ try {
       id TEXT PRIMARY KEY,
       email TEXT,
       pin_hash TEXT,
+      auth_version INTEGER NOT NULL DEFAULT 0,
       business_name TEXT NOT NULL,
       owner_name TEXT NOT NULL,
       phone TEXT UNIQUE,
@@ -61,6 +62,29 @@ try {
       deadline TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS pin_reset_challenges (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      phone TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ
+    );
+
+    CREATE INDEX IF NOT EXISTS pin_reset_challenges_user_created_idx
+      ON pin_reset_challenges (user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS auth_rate_limits (
+      key_hash TEXT PRIMARY KEY,
+      window_started_at TIMESTAMPTZ NOT NULL,
+      request_count INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS auth_rate_limits_window_idx
+      ON auth_rate_limits (window_started_at);
   `)
   // Migrations — add columns that may be missing from older table versions
   await pool.query(`
@@ -76,6 +100,7 @@ try {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS reg_cert_url TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS business_type TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_hash TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT 0;
     UPDATE users SET pin_hash = '' WHERE pin_hash IS NULL;
     ALTER TABLE users ALTER COLUMN pin_hash SET DEFAULT '';
     ALTER TABLE users ALTER COLUMN pin_hash SET NOT NULL;

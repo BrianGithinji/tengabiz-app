@@ -1,7 +1,7 @@
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
-import { randomUUID } from 'crypto'
+import { createHmac, randomInt, randomUUID, timingSafeEqual } from 'crypto'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import multer from 'multer'
@@ -10,6 +10,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { z } from 'zod'
 import passport from '../passport.js'
+import { isRecoverySmsConfigured, sendRecoveryCode } from '../sms.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -47,8 +48,58 @@ const loginSchema = z.object({
   pin: z.string().min(4),
 })
 
-function signToken(userId: string) {
-  return jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: '30d' })
+const forgotPinSchema = z.object({
+  phone: z.string().trim().min(9).max(16),
+})
+
+const resetPinSchema = z.object({
+  phone: z.string().trim().min(9).max(16),
+  code: z.string().regex(/^\d{6}$/),
+  pin: z.string().regex(/^\d{4}$/),
+})
+
+function signToken(userId: string, authVersion = 0) {
+  return jwt.sign({ userId, authVersion }, process.env.JWT_SECRET!, { expiresIn: '30d' })
+}
+
+function normalizeKenyanPhone(phone: string): string | null {
+  const digits = phone.replace(/\D/g, '')
+  const international = digits.startsWith('0')
+    ? `254${digits.slice(1)}`
+    : digits.length === 9
+      ? `254${digits}`
+      : digits
+  return /^254[71]\d{8}$/.test(international) ? `+${international}` : null
+}
+
+function hashRecoveryValue(value: string): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) throw new Error('JWT_SECRET is required for secure PIN recovery.')
+  return createHmac('sha256', secret).update(value).digest('hex')
+}
+
+async function consumeRateLimit(key: string, limit: number, windowSeconds: number): Promise<boolean> {
+  const keyHash = hashRecoveryValue(key)
+  await pool.query("DELETE FROM auth_rate_limits WHERE window_started_at < NOW() - INTERVAL '1 day'")
+  const { rows } = await pool.query<{ request_count: number }>(`
+    INSERT INTO auth_rate_limits (key_hash, window_started_at, request_count)
+    VALUES ($1, NOW(), 1)
+    ON CONFLICT (key_hash) DO UPDATE SET
+      request_count = CASE
+        WHEN auth_rate_limits.window_started_at <= NOW() - ($2 * INTERVAL '1 second') THEN 1
+        ELSE auth_rate_limits.request_count + 1
+      END,
+      window_started_at = CASE
+        WHEN auth_rate_limits.window_started_at <= NOW() - ($2 * INTERVAL '1 second') THEN NOW()
+        ELSE auth_rate_limits.window_started_at
+      END
+    RETURNING request_count
+  `, [keyHash, windowSeconds])
+  return rows[0].request_count <= limit
+}
+
+function getClientAddress(req: Request): string {
+  return req.ip ?? req.socket.remoteAddress ?? 'unknown'
 }
 
 // POST /api/auth/register
@@ -92,21 +143,217 @@ router.post('/login', async (req, res) => {
   const result = loginSchema.safeParse(req.body)
   if (!result.success) { res.status(400).json({ error: 'Validation failed' }); return }
 
-  const { phone, pin } = result.data
-  const { rows } = await pool.query('SELECT * FROM users WHERE phone = $1', [phone])
+  try {
+    const { phone, pin } = result.data
+    const normalizedPhone = normalizeKenyanPhone(phone) ?? phone.replace(/\D/g, '')
+    const ipAllowed = await consumeRateLimit(`login:ip:${getClientAddress(req)}`, 30, 60 * 60)
+    if (!ipAllowed) {
+      res.status(429).json({ error: 'Too many sign-in attempts. Please try again later.' })
+      return
+    }
+    const phoneAllowed = await consumeRateLimit(`login:phone:${normalizedPhone}`, 10, 15 * 60)
+    if (!phoneAllowed) {
+      res.status(429).json({ error: 'Too many sign-in attempts. Please try again later.' })
+      return
+    }
 
-  if (rows.length === 0) { res.status(401).json({ error: 'Invalid phone number or PIN' }); return }
+    const phoneDigits = normalizedPhone.replace(/\D/g, '')
+    const localPhone = phoneDigits.startsWith('254') ? `0${phoneDigits.slice(3)}` : phoneDigits
+    const { rows } = await pool.query(
+      `SELECT * FROM users
+       WHERE phone = $1 OR regexp_replace(phone, '\\D', '', 'g') = ANY($2::text[])
+       LIMIT 1`,
+      [phone, [phoneDigits, phoneDigits.slice(3), localPhone]]
+    )
 
-  const user = rows[0]
-  const valid = await bcrypt.compare(pin, user.pin_hash)
-  if (!valid) { res.status(401).json({ error: 'Invalid phone number or PIN' }); return }
+    if (rows.length === 0) { res.status(401).json({ error: 'Invalid phone number or PIN' }); return }
 
-  res.json({
-    token: signToken(user.id),
-    userId: user.id,
-    businessName: user.business_name,
-    ownerName: user.owner_name,
-  })
+    const user = rows[0]
+    const valid = await bcrypt.compare(pin, user.pin_hash)
+    if (!valid) { res.status(401).json({ error: 'Invalid phone number or PIN' }); return }
+
+    res.json({
+      token: signToken(user.id, user.auth_version),
+      userId: user.id,
+      businessName: user.business_name,
+      ownerName: user.owner_name,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[auth/login] Failed:', message)
+    res.status(500).json({ error: 'Unable to sign in. Please try again.' })
+  }
+})
+
+// POST /api/auth/forgot-pin
+router.post('/forgot-pin', async (req, res) => {
+  const parsed = forgotPinSchema.safeParse(req.body)
+  const phone = parsed.success ? normalizeKenyanPhone(parsed.data.phone) : null
+  if (!phone) {
+    res.status(400).json({ error: 'Enter a valid Kenyan mobile number.' })
+    return
+  }
+
+  if (!isRecoverySmsConfigured()) {
+    res.status(503).json({ error: 'PIN recovery is not configured yet. Please contact TENGABIZ support.' })
+    return
+  }
+
+  try {
+    const ipAllowed = await consumeRateLimit(`pin-reset:ip:${getClientAddress(req)}`, 10, 60 * 60)
+    if (!ipAllowed) {
+      res.status(429).json({ error: 'Too many recovery requests. Please try again later.' })
+      return
+    }
+    const phoneAllowed = await consumeRateLimit(`pin-reset:phone:${phone}`, 3, 15 * 60)
+    if (!phoneAllowed) {
+      res.status(429).json({ error: 'Too many recovery requests. Please try again later.' })
+      return
+    }
+
+    const phoneDigits = phone.slice(1)
+    const localPhone = `0${phoneDigits.slice(3)}`
+    const { rows } = await pool.query<{ id: string }>(
+      `SELECT id, phone FROM users
+       WHERE regexp_replace(phone, '\\D', '', 'g') = ANY($1::text[])
+       LIMIT 1`,
+      [[phoneDigits, phoneDigits.slice(3), localPhone]]
+    )
+
+    if (rows.length > 0) {
+      const user = rows[0]
+      const code = String(randomInt(0, 1_000_000)).padStart(6, '0')
+      const challengeId = randomUUID()
+      await pool.query(
+        `UPDATE pin_reset_challenges SET used_at = NOW()
+         WHERE user_id = $1 AND used_at IS NULL`,
+        [user.id]
+      )
+      await pool.query(
+        `INSERT INTO pin_reset_challenges (id, user_id, phone, code_hash, expires_at)
+         VALUES ($1, $2, $3, $4, NOW() + INTERVAL '10 minutes')`,
+        [challengeId, user.id, phone, hashRecoveryValue(`${challengeId}:${code}`)]
+      )
+
+      try {
+        await sendRecoveryCode(phone, code)
+      } catch (error) {
+        await pool.query(
+          'UPDATE pin_reset_challenges SET used_at = NOW() WHERE id = $1',
+          [challengeId]
+        )
+        const message = error instanceof Error ? error.message : String(error)
+        console.error('[auth/forgot-pin] SMS delivery failed:', message)
+      }
+    }
+
+    res.json({ message: 'If an account matches that number, a recovery code will be sent.' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[auth/forgot-pin] Failed:', message)
+    res.status(500).json({ error: 'Unable to process the recovery request. Please try again.' })
+  }
+})
+
+// POST /api/auth/reset-pin
+router.post('/reset-pin', async (req, res) => {
+  const parsed = resetPinSchema.safeParse(req.body)
+  const phone = parsed.success ? normalizeKenyanPhone(parsed.data.phone) : null
+  if (!parsed.success || !phone) {
+    res.status(400).json({ error: 'Enter a valid phone number, six-digit code, and four-digit PIN.' })
+    return
+  }
+
+  try {
+    const ipAllowed = await consumeRateLimit(`pin-reset-verify:ip:${getClientAddress(req)}`, 20, 60 * 60)
+    if (!ipAllowed) {
+      res.status(429).json({ error: 'Too many verification attempts. Please try again later.' })
+      return
+    }
+    const phoneAllowed = await consumeRateLimit(`pin-reset-verify:phone:${phone}`, 10, 60 * 60)
+    if (!phoneAllowed) {
+      res.status(429).json({ error: 'Too many verification attempts. Please try again later.' })
+      return
+    }
+
+    const phoneDigits = phone.slice(1)
+    const localPhone = `0${phoneDigits.slice(3)}`
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const { rows: users } = await client.query<{ id: string }>(
+        `SELECT id FROM users
+         WHERE regexp_replace(phone, '\\D', '', 'g') = ANY($1::text[])
+         LIMIT 1`,
+        [[phoneDigits, phoneDigits.slice(3), localPhone]]
+      )
+
+      if (users.length === 0) {
+        await client.query('ROLLBACK')
+        res.status(400).json({ error: 'The code is invalid or expired. Request a new code and try again.' })
+        return
+      }
+
+      const userId = users[0].id
+      const { rows: challenges } = await client.query<{
+        id: string
+        code_hash: string
+        attempts: number
+        expired: boolean
+      }>(
+        `SELECT id, code_hash, attempts, expires_at <= NOW() AS expired
+         FROM pin_reset_challenges
+         WHERE user_id = $1 AND phone = $2 AND used_at IS NULL
+         ORDER BY created_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [userId, phone]
+      )
+      const challenge = challenges[0]
+
+      if (!challenge || challenge.expired || challenge.attempts >= 5) {
+        if (challenge) {
+          await client.query('UPDATE pin_reset_challenges SET used_at = NOW() WHERE id = $1', [challenge.id])
+        }
+        await client.query('COMMIT')
+        res.status(400).json({ error: 'The code is invalid or expired. Request a new code and try again.' })
+        return
+      }
+
+      const submittedHash = hashRecoveryValue(`${challenge.id}:${parsed.data.code}`)
+      const validCode = timingSafeEqual(Buffer.from(submittedHash, 'hex'), Buffer.from(challenge.code_hash, 'hex'))
+      if (!validCode) {
+        const attempts = challenge.attempts + 1
+        await client.query(
+          `UPDATE pin_reset_challenges SET attempts = $1, used_at = CASE WHEN $1 >= 5 THEN NOW() ELSE used_at END
+           WHERE id = $2`,
+          [attempts, challenge.id]
+        )
+        await client.query('COMMIT')
+        res.status(400).json({ error: 'The code is invalid or expired. Request a new code and try again.' })
+        return
+      }
+
+      const pinHash = await bcrypt.hash(parsed.data.pin, 10)
+      await client.query('UPDATE users SET pin_hash = $1 WHERE id = $2', [pinHash, userId])
+      await client.query('UPDATE users SET auth_version = auth_version + 1 WHERE id = $1', [userId])
+      await client.query(
+        'UPDATE pin_reset_challenges SET used_at = COALESCE(used_at, NOW()) WHERE user_id = $1',
+        [userId]
+      )
+      await client.query('COMMIT')
+      res.json({ message: 'Your PIN has been reset. You can now sign in.' })
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[auth/reset-pin] Failed:', message)
+    res.status(500).json({ error: 'Unable to reset your PIN. Please try again.' })
+  }
 })
 
 // GET /api/auth/me
@@ -160,7 +407,7 @@ router.get('/google/callback',
         console.error('[google/callback] No user returned')
         return res.redirect('/?error=google_failed')
       }
-      const token = signToken(user.id)
+      const token = signToken(user.id, user.auth_version ?? 0)
       res.redirect(`/?token=${token}&businessName=${encodeURIComponent(user.business_name)}&ownerName=${encodeURIComponent(user.owner_name)}&isNew=${user.is_new ? '1' : '0'}`)
     })(req, res, next)
   }
