@@ -8,7 +8,7 @@ const router = Router()
 
 const channelSchema = z.object({
   type: z.enum(['till', 'paybill', 'pochi']),
-  identifier: z.string().min(1), // Till number, Paybill shortcode, or phone number
+  identifier: z.string().trim().min(1), // Till number, Paybill shortcode, or phone number
   label: z.string().optional(),  // e.g. "Main Shop Till"
 })
 

@@ -26,6 +26,18 @@ async function resolveUser(identifier: string): Promise<string | null> {
   return rows[0]?.user_id ?? null
 }
 
+async function resolveIncomingChannel(identifier: string, channelType: string | null) {
+  const { rows } = await pool.query<{ user_id: string; type: string }>(
+    `SELECT user_id, type FROM channels
+     WHERE identifier = $1 AND active = TRUE
+       AND type IN ('till', 'paybill')
+       AND ($2::text IS NULL OR type = $2)
+     LIMIT 2`,
+    [identifier, channelType]
+  )
+  return rows.length === 1 ? rows[0] : null
+}
+
 async function insertTx(tx: {
   id: string; user_id: string | null; mpesa_receipt: string | null
   phone: string; amount: number; channel: string; type: string
@@ -61,7 +73,6 @@ export async function handleStkCallback(req: Request, res: Response) {
   const amount = Number(items['Amount'])
   const { businessLock, savingsGrowth, flexibleFunds } = allocate(amount)
 
-  // Match to user via the shortcode that received the payment
   const shortcode = String(process.env.MPESA_STK_SHORTCODE ?? '')
   const userId = await resolveUser(shortcode)
 
@@ -90,22 +101,34 @@ export function handleC2BValidation(req: Request, res: Response) {
 export async function handleC2BConfirmation(req: Request, res: Response) {
   const { TransID, TransAmount, MSISDN, BillRefNumber, TransTime, BusinessShortCode, TransactionType } = req.body
   const amount = Number(TransAmount)
+  if (!TransID || !Number.isFinite(amount) || amount <= 0 || !MSISDN) {
+    console.error('[C2B] Ignoring callback with missing receipt, phone, or valid amount.')
+    res.json({ ResultCode: 0, ResultDesc: 'Accepted' })
+    return
+  }
   const { businessLock, savingsGrowth, flexibleFunds } = allocate(amount)
 
-  // Match to user via their Till/Paybill shortcode or Pochi phone number
-  const identifier = BusinessShortCode ?? normalisePhone(String(MSISDN))
-  const userId = await resolveUser(identifier)
+  const transactionType = String(TransactionType ?? '').toLowerCase().replace(/[^a-z]/g, '')
+  const requestedType = transactionType.includes('buygoods')
+    ? 'till'
+    : transactionType.includes('paybill')
+      ? 'paybill'
+      : null
+  const identifier = String(BusinessShortCode ?? '').trim()
+  const channel = identifier
+    ? await resolveIncomingChannel(identifier, requestedType)
+    : null
 
   await insertTx({
-    id: randomUUID(), user_id: userId, mpesa_receipt: TransID,
+    id: randomUUID(), user_id: channel?.user_id ?? null, mpesa_receipt: String(TransID),
     phone: normalisePhone(String(MSISDN)), amount,
-    channel: TransactionType === 'Buy Goods' ? 'till' : BusinessShortCode ? 'paybill' : 'pochi', type: 'in',
+    channel: channel?.type ?? requestedType ?? 'unmatched', type: 'in',
     account_ref: BillRefNumber ?? null, transaction_date: String(TransTime),
     business_lock: businessLock, savings_growth: savingsGrowth,
     flexible_funds: flexibleFunds, allocated: 1,
   })
 
-  console.log(`[C2B] Saved — KES ${amount} for user ${userId ?? 'unmatched'}`)
+  console.log(`[C2B] Saved — KES ${amount} for user ${channel?.user_id ?? 'unmatched'} via ${channel?.type ?? 'unmatched'} channel`)
   res.json({ ResultCode: 0, ResultDesc: 'Accepted' })
 }
 

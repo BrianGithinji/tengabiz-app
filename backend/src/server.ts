@@ -6,7 +6,6 @@ import { fileURLToPath } from 'url'
 import { mkdirSync } from 'fs'
 import mpesaRoutes from './routes/mpesa.js'
 import paymentsRoutes from './routes/payments.js'
-import simulationRoutes from './routes/simulation.js'
 import authRoutes from './routes/auth.js'
 import channelsRoutes from './routes/channels.js'
 import passport from './passport.js'
@@ -40,7 +39,6 @@ app.use('/uploads', express.static(uploadsDir))
 // ── Routes (must be before static) ───────────────────────────────────────────
 app.use('/api/mpesa', mpesaRoutes)
 app.use('/api/payments', paymentsRoutes)
-app.use('/api/internal-payment', simulationRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/channels', channelsRoutes)
 
