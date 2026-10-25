@@ -43,13 +43,24 @@ export async function sendRecoveryCode(phone: string, code: string): Promise<voi
     signal: AbortSignal.timeout(10_000),
   })
 
-  const result = await response.json() as {
+  const contentType = response.headers.get('content-type') ?? 'unknown'
+  const responseBody = await response.text()
+  let result: {
     SMSMessageData?: {
       Recipients?: Array<{ statusCode?: number; status?: string }>
     }
   }
+  try {
+    result = JSON.parse(responseBody)
+  } catch {
+    throw new Error(`Africa’s Talking returned a non-JSON response (HTTP ${response.status}, ${contentType}). Check the API key, username, and environment.`)
+  }
+
   const recipient = result.SMSMessageData?.Recipients?.[0]
   if (!response.ok || recipient?.statusCode !== 101) {
-    throw new Error(`Africa’s Talking SMS request failed with HTTP ${response.status}.`)
+    const providerCode = recipient?.statusCode
+    throw new Error(
+      `Africa’s Talking rejected the SMS request (HTTP ${response.status}${providerCode ? `, provider code ${providerCode}` : ''}). Check the API key, username, environment, and sender ID configuration.`,
+    )
   }
 }
