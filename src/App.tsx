@@ -1678,6 +1678,7 @@ function AboutView() {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('dashboard')
+  const [tabHistory, setTabHistory] = useState<Tab[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
   const [screen, setScreen] = useState<AppScreen>(() =>
@@ -1748,6 +1749,7 @@ export default function App() {
       setScreen('setup')
     } else {
       localStorage.removeItem('tengabiz_new')
+      setTabHistory([])
       setTab('dashboard')
       setScreen('app')
     }
@@ -1776,7 +1778,24 @@ export default function App() {
     setAuthMessage('')
   }
 
-  function navigate(t: Tab) { setTab(t); setDrawerOpen(false) }
+  function navigate(t: Tab) {
+    if (t !== tab) setTabHistory(history => [...history, tab])
+    setTab(t)
+    setDrawerOpen(false)
+  }
+
+  function navigateBack() {
+    const previousTab = tabHistory.at(-1) ?? 'dashboard'
+    setTabHistory(history => history.slice(0, -1))
+    setTab(previousTab)
+  }
+
+  const tabLabels: Record<Tab, string> = {
+    dashboard: 'Dashboard',
+    loans: 'Loan Readiness',
+    settings: 'Profile & Setup',
+    about: 'About the App',
+  }
 
   if (!user) return <AuthPage onSuccess={handleAuthSuccess} prefillPhone={authPhone} message={authMessage} />
   if (screen === 'setup') return <SetupChannel user={user} onDone={handleSetupDone} />
@@ -1851,6 +1870,18 @@ export default function App() {
 
         {/* Page content */}
         <div className="flex-1 px-4 pt-4 pb-8">
+          {tab !== 'dashboard' && (
+            <button
+              onClick={navigateBack}
+              aria-label={`Back to ${tabLabels[tabHistory.at(-1) ?? 'dashboard']}`}
+              className={`mb-4 inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition-colors ${
+                darkMode ? 'text-green-200 hover:bg-white/10' : 'text-[#1a6b3c] hover:bg-[#f0faf4]'
+              }`}
+            >
+              <span aria-hidden="true">←</span>
+              Back to {tabLabels[tabHistory.at(-1) ?? 'dashboard']}
+            </button>
+          )}
           {tab === 'dashboard' && loading ? (
             <div className="flex items-center justify-center h-40">
               <p className="text-sm text-[#718096]">Loading...</p>
