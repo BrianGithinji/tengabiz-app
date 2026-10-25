@@ -30,11 +30,40 @@ export default function LoanReportModal({ score, businessName, ownerName, onClos
         import('jspdf'),
       ])
       await document.fonts.ready
+      const colorCanvas = document.createElement('canvas')
+      const colorContext = colorCanvas.getContext('2d', { willReadFrequently: true })
+      if (!colorContext) throw new Error('Could not initialize CSS color conversion.')
+
       const canvas = await html2canvas(certificate, {
         backgroundColor: '#ffffff',
         scale: 2,
         useCORS: true,
         ignoreElements: element => element.hasAttribute('data-pdf-ignore'),
+        onclone: clonedDocument => {
+          const clonedCertificate = clonedDocument.getElementById('loan-certificate')
+          if (!clonedCertificate) throw new Error('Could not find the cloned certificate.')
+
+          const elements = [clonedCertificate, ...clonedCertificate.querySelectorAll<HTMLElement>('*')]
+          for (const element of elements) {
+            const styles = clonedDocument.defaultView?.getComputedStyle(element)
+            if (!styles) throw new Error('Could not read the cloned certificate styles.')
+
+            for (let index = 0; index < styles.length; index++) {
+              const property = styles[index]
+              const value = styles.getPropertyValue(property)
+              if (!/(?:oklab|oklch)\(/i.test(value)) continue
+
+              const compatibleValue = value.replace(/(?:oklab|oklch)\([^)]*\)/gi, color => {
+                colorContext.clearRect(0, 0, 1, 1)
+                colorContext.fillStyle = color
+                colorContext.fillRect(0, 0, 1, 1)
+                const [red, green, blue, alpha] = colorContext.getImageData(0, 0, 1, 1).data
+                return `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`
+              })
+              element.style.setProperty(property, compatibleValue, 'important')
+            }
+          }
+        },
       })
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
       const margin = 10
