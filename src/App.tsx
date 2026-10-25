@@ -1864,7 +1864,7 @@ export default function App() {
           ) : (
             <>
               {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} onMenuOpen={() => setDrawerOpen(true)} refresh={refresh} />}
-              {tab === 'loans'     && <BusinessHub businessName={user.businessName} ownerName={user.ownerName} />}
+              {tab === 'loans'     && <BusinessHub />}
               {tab === 'settings'  && <Settings user={user} onLogout={handleLogout} />}
               {tab === 'about'     && <AboutView />}
             </>
