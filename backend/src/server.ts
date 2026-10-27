@@ -8,6 +8,7 @@ import mpesaRoutes from './routes/mpesa.js'
 import paymentsRoutes from './routes/payments.js'
 import authRoutes from './routes/auth.js'
 import channelsRoutes from './routes/channels.js'
+import posRoutes from './routes/pos.js'
 import passport from './passport.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -41,6 +42,7 @@ app.use('/api/mpesa', mpesaRoutes)
 app.use('/api/payments', paymentsRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/channels', channelsRoutes)
+app.use('/api/pos', posRoutes)
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'TENGABIZ API', env: process.env.MPESA_ENV ?? 'sandbox' })

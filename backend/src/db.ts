@@ -83,8 +83,91 @@ try {
       request_count INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS products (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT,
+      sku TEXT,
+      barcode TEXT,
+      category TEXT,
+      unit TEXT NOT NULL DEFAULT 'units',
+      cost_price NUMERIC(12,2) NOT NULL DEFAULT 0,
+      selling_price NUMERIC(12,2) NOT NULL DEFAULT 0,
+      wholesale_price NUMERIC(12,2),
+      current_stock INTEGER NOT NULL DEFAULT 0,
+      reorder_threshold INTEGER NOT NULL DEFAULT 0,
+      supplier_name TEXT,
+      expiry_date DATE,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS stock_movements (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      movement_type TEXT NOT NULL,
+      quantity_delta INTEGER NOT NULL,
+      reason TEXT,
+      notes TEXT,
+      previous_quantity INTEGER NOT NULL DEFAULT 0,
+      new_quantity INTEGER NOT NULL DEFAULT 0,
+      created_by_user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reference TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS sales (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      receipt_number TEXT NOT NULL UNIQUE,
+      payment_method TEXT NOT NULL DEFAULT 'cash',
+      status TEXT NOT NULL DEFAULT 'completed',
+      subtotal NUMERIC(12,2) NOT NULL DEFAULT 0,
+      tax NUMERIC(12,2) NOT NULL DEFAULT 0,
+      total NUMERIC(12,2) NOT NULL DEFAULT 0,
+      amount_paid NUMERIC(12,2) NOT NULL DEFAULT 0,
+      change_due NUMERIC(12,2) NOT NULL DEFAULT 0,
+      cogs NUMERIC(12,2) NOT NULL DEFAULT 0,
+      gross_profit NUMERIC(12,2) NOT NULL DEFAULT 0,
+      customer_name TEXT,
+      idempotency_key TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS sale_items (
+      id TEXT PRIMARY KEY,
+      sale_id TEXT NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+      product_name TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      unit_price NUMERIC(12,2) NOT NULL,
+      unit_cost NUMERIC(12,2) NOT NULL,
+      subtotal NUMERIC(12,2) NOT NULL,
+      cogs NUMERIC(12,2) NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE INDEX IF NOT EXISTS auth_rate_limits_window_idx
       ON auth_rate_limits (window_started_at);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS products_user_sku_idx
+      ON products (user_id, lower(sku))
+      WHERE sku IS NOT NULL AND sku <> '';
+    CREATE UNIQUE INDEX IF NOT EXISTS products_user_barcode_idx
+      ON products (user_id, lower(barcode))
+      WHERE barcode IS NOT NULL AND barcode <> '';
+    CREATE INDEX IF NOT EXISTS products_user_active_idx
+      ON products (user_id, active, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS stock_movements_product_created_idx
+      ON stock_movements (product_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS sales_user_created_idx
+      ON sales (user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS sale_items_sale_idx
+      ON sale_items (sale_id);
   `)
   // Migrations — add columns that may be missing from older table versions
   await pool.query(`

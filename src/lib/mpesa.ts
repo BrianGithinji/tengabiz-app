@@ -131,6 +131,27 @@ export interface Summary {
   tx_count: number
 }
 
+export interface Product {
+  id: string
+  user_id: string
+  name: string
+  description: string | null
+  sku: string | null
+  barcode: string | null
+  category: string | null
+  unit: string
+  cost_price: number
+  selling_price: number
+  wholesale_price: number | null
+  current_stock: number
+  reorder_threshold: number
+  supplier_name: string | null
+  expiry_date: string | null
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export const auth = {
@@ -175,4 +196,17 @@ export const mpesa = {
   getTransactions: () => get<Transaction[]>('/api/mpesa/transactions', true),
 
   getSummary: () => get<Summary>('/api/mpesa/summary', true),
+}
+
+export const pos = {
+  listProducts: () => get<Product[]>('/api/pos/products', true),
+
+  createProduct: (body: Record<string, unknown>) =>
+    post<Product>('/api/pos/products', body, true),
+
+  receiveStock: (productId: string, body: Record<string, unknown>) =>
+    post<{ product: Product; movement: { previous: number; next: number; quantity: number } }>(`/api/pos/products/${productId}/receive-stock`, body, true),
+
+  createSale: (body: Record<string, unknown>) =>
+    post<{ sale: Record<string, unknown>; receiptNumber: string; duplicate: boolean }>(`/api/pos/sales`, body, true),
 }

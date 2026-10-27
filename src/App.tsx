@@ -5,10 +5,11 @@ import AvailableMoneyView from './AvailableMoneyView'
 import ProfitLockView from './ProfitLockView'
 import SavingsView from './SavingsView'
 import BusinessHub from './BusinessHub'
+import PosInventoryView from './PosInventoryView'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'dashboard' | 'loans' | 'settings' | 'about'
+type Tab = 'dashboard' | 'pos' | 'loans' | 'settings' | 'about'
 type AuthScreen = 'login' | 'register'
 type AppScreen = 'app' | 'setup'
 
@@ -1850,6 +1851,7 @@ export default function App() {
 
   const tabLabels: Record<Tab, string> = {
     dashboard: 'Dashboard',
+    pos: 'Inventory & POS',
     loans: 'Loan Readiness',
     settings: 'Profile & Setup',
     about: 'About the App',
@@ -1886,6 +1888,7 @@ export default function App() {
           <div className="flex-1 py-4 overflow-y-auto">
             {[
               { id: 'dashboard' as Tab, icon: '⊞', label: 'Dashboard' },
+              { id: 'pos' as Tab,       icon: '◫', label: 'Inventory & POS' },
               { id: 'loans' as Tab,     icon: '◈', label: 'Loan Readiness' },
               { id: 'settings' as Tab,  icon: '⚙', label: 'Profile & Setup' },
               { id: 'about' as Tab,     icon: 'ℹ', label: 'About the App' },
@@ -1953,6 +1956,7 @@ export default function App() {
           ) : (
             <>
               {tab === 'dashboard' && <Dashboard transactions={transactions} summary={summary} ownerName={user.ownerName} userChannels={userChannels} onMenuOpen={() => setDrawerOpen(true)} refresh={refresh} />}
+              {tab === 'pos'       && <PosInventoryView token={user.token} />}
               {tab === 'loans'     && <BusinessHub />}
               {tab === 'settings'  && <Settings user={user} onLogout={handleLogout} />}
               {tab === 'about'     && <AboutView />}
